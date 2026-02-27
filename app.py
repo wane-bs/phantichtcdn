@@ -180,7 +180,9 @@ if uploaded_file is not None:
                     })
         
         df_display = pd.DataFrame(display_data)
-        st.dataframe(df_display.pivot(index=["Nhóm", "Chỉ số"], columns="Năm", values="Giá trị"), use_container_width=True)
+        pivoted_df = df_display.pivot(index=["Nhóm", "Chỉ số"], columns="Năm", values="Giá trị").reset_index()
+        pivoted_df.columns.name = None
+        st.dataframe(pivoted_df, use_container_width=True, hide_index=True)
         
         st.divider()
         st.subheader("Trực quan hóa Dữ liệu (DVE Visualizations)")
