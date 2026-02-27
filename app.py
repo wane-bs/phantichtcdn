@@ -28,6 +28,94 @@ def get_val(df, var_name, year):
 
 # ===================== DATA PROCESSING (DE) =====================
 
+def _is_year_like(val):
+    """Kiểm tra giá trị có phải là năm (4 chữ số, 1900-2100) hay không."""
+    try:
+        s = str(val).strip().replace('.0', '')
+        return s.isdigit() and 1900 <= int(s) <= 2100
+    except:
+        return False
+
+def _detect_and_normalize_sheet(df, sheet_name):
+    """
+    Tự động phát hiện layout dọc hay ngang và chuẩn hóa về dạng:
+        Biến số | Sheet | 2021 | 2022 | ...
+    
+    Layout DỌC (vertical): Cột 'Năm' chứa tên chỉ tiêu, các cột còn lại là năm.
+        Năm          | 2021  | 2022  | ...
+        TỔNG TÀI SẢN | 123   | 456   | ...
+        → Chỉ cần rename 'Năm' → 'Biến số'
+    
+    Layout NGANG (horizontal): Cột 'Năm' chứa giá trị năm, các cột còn lại là tên chỉ tiêu.
+        Năm  | TỔNG TÀI SẢN | Doanh thu | ...
+        2021 | 123           | 789       | ...
+        → Cần transpose
+    """
+    if df.empty:
+        return None
+
+    # --- Trường hợp 1: Có cột 'Năm' ---
+    if 'Năm' in df.columns:
+        # Lấy giá trị không null đầu tiên trong cột 'Năm' để phán đoán
+        non_null_vals = df['Năm'].dropna().head(5)
+        year_count = sum(1 for v in non_null_vals if _is_year_like(v))
+        
+        if year_count > len(non_null_vals) / 2:
+            # ===== LAYOUT NGANG: Cột 'Năm' chứa số năm → Transpose =====
+            df['Năm'] = df['Năm'].astype(str).str.replace(r'\.0$', '', regex=True)
+            df.set_index('Năm', inplace=True)
+            df_t = df.T
+            df_t.reset_index(inplace=True)
+            df_t.rename(columns={'index': 'Biến số'}, inplace=True)
+        else:
+            # ===== LAYOUT DỌC: Cột 'Năm' chứa tên chỉ tiêu → Rename =====
+            df = df.copy()
+            df.rename(columns={'Năm': 'Biến số'}, inplace=True)
+            # Chuẩn hóa tên cột năm (bỏ .0 nếu có)
+            new_cols = {}
+            for c in df.columns:
+                s = str(c).strip()
+                if _is_year_like(s):
+                    new_cols[c] = s.replace('.0', '')
+            if new_cols:
+                df.rename(columns=new_cols, inplace=True)
+            df_t = df
+    else:
+        # --- Trường hợp 2: Không có cột 'Năm' → thử dùng cột đầu tiên ---
+        first_col = df.columns[0]
+        other_cols = df.columns[1:]
+        
+        # Kiểm tra các cột còn lại có phải năm không
+        year_cols = [c for c in other_cols if _is_year_like(c)]
+        
+        if len(year_cols) > 0:
+            # Cột đầu tiên chứa tên chỉ tiêu, các cột còn lại là năm
+            df = df.copy()
+            df.rename(columns={first_col: 'Biến số'}, inplace=True)
+            new_cols = {}
+            for c in df.columns:
+                s = str(c).strip()
+                if _is_year_like(s):
+                    new_cols[c] = s.replace('.0', '')
+            if new_cols:
+                df.rename(columns=new_cols, inplace=True)
+            df_t = df
+        else:
+            # Kiểm tra nếu giá trị cột đầu tiên chứa năm → transpose
+            non_null_vals = df[first_col].dropna().head(5)
+            year_count = sum(1 for v in non_null_vals if _is_year_like(v))
+            if year_count > len(non_null_vals) / 2:
+                df[first_col] = df[first_col].astype(str).str.replace(r'\.0$', '', regex=True)
+                df.set_index(first_col, inplace=True)
+                df_t = df.T
+                df_t.reset_index(inplace=True)
+                df_t.rename(columns={'index': 'Biến số'}, inplace=True)
+            else:
+                return None
+
+    df_t['Sheet'] = sheet_name
+    return df_t
+
 def process_uploaded_file(uploaded_file):
     xls = pd.ExcelFile(uploaded_file)
     target_sheets = ['BALANCE SHEEET', 'INCOME STATEMENT', 'CASH FLOW STATEMENT']
@@ -36,14 +124,9 @@ def process_uploaded_file(uploaded_file):
     for sheet in target_sheets:
         if sheet in xls.sheet_names:
             df = pd.read_excel(xls, sheet_name=sheet)
-            if 'Năm' in df.columns:
-                df['Năm'] = df['Năm'].astype(str).str.replace(r'\.0$', '', regex=True)
-                df.set_index('Năm', inplace=True)
-                df_t = df.T
-                df_t.reset_index(inplace=True)
-                df_t.rename(columns={'index': 'Biến số'}, inplace=True)
-                df_t['Sheet'] = sheet
-                all_data.append(df_t)
+            result = _detect_and_normalize_sheet(df, sheet)
+            if result is not None:
+                all_data.append(result)
 
     if all_data:
         final_df = pd.concat(all_data, ignore_index=True)
