@@ -47,7 +47,7 @@ class DataProcessor:
 
 if __name__ == "__main__":
     # Test read
-    processor = DataProcessor("data/hvn data.xlsx")
+    processor = DataProcessor("data/hvn_data.xlsx")
     dfs = processor.load_and_normalize()
     for name, df in dfs.items():
         print(f"--- {name} ---")

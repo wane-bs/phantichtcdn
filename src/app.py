@@ -58,7 +58,7 @@ COLORS = {
 
 @st.cache_data
 def load_data(_v=3):  # bump _v to invalidate old cache
-    processor = DataProcessor("data/hvn data.xlsx")
+    processor = DataProcessor("data/hvn_data.xlsx")
     dfs = processor.load_and_normalize()
     calc = Calculator(dfs)
     return calc.run_all()
