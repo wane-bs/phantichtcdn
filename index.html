@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <title>HVN Financial Analysis - Streamlit on GitHub Pages</title>
+    <!-- Stlite CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.1/build/stlite.css" />
+    <style>
+      body, html { height: 100%; margin: 0; padding: 0; }
+      #root { height: 100%; width: 100%; }
+    </style>
+  </head>
+  <body>
+    <!-- Stlite Container -->
+    <div id="root"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.1/build/stlite.js"></script>
+    <script>
+      stlite.mount(
+        {
+          requirements: ["streamlit", "pandas", "numpy", "plotly", "openpyxl", "scikit-learn"],
+          entrypoint: "app.py",
+          files: {
+            "app.py": { url: "./src/app.py" },
+            "calculator.py": { url: "./src/calculator.py" },
+            "data_processor.py": { url: "./src/data_processor.py" },
+            "forecaster.py": { url: "./src/forecaster.py" },
+            "ml_analyzer.py": { url: "./src/ml_analyzer.py" },
+            "validator.py": { url: "./src/validator.py" },
+            "data/hvn data.xlsx": { url: "./data/hvn data.xlsx" },
+            "data/hvn.xlsx": { url: "./data/hvn.xlsx" },
+            "data/FiinTrade_Chỉ_Số_Tài_Chính_HVN_20260212.xlsx": { url: "./data/FiinTrade_Chỉ_Số_Tài_Chính_HVN_20260212.xlsx" },
+            "data/SSI_HVN_Financial_Statement_Balance_Sheet_12022026.xlsx": { url: "./data/SSI_HVN_Financial_Statement_Balance_Sheet_12022026.xlsx" },
+            "data/SSI_HVN_Financial_statement_Cash_Flow_12022026.xlsx": { url: "./data/SSI_HVN_Financial_statement_Cash_Flow_12022026.xlsx" },
+            "data/SSI_HVN_Financial_statement_Income_Statement_12022026.xlsx": { url: "./data/SSI_HVN_Financial_statement_Income_Statement_12022026.xlsx" }
+          }
+        },
+        document.getElementById("root")
+      );
+    </script>
+  </body>
+</html>

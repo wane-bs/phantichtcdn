@@ -50,7 +50,7 @@ class Validator:
         
 if __name__ == "__main__":
     from data_processor import DataProcessor
-    processor = DataProcessor(r"c:\chương_trình_phân_tich\hvn\hvn data.xlsx")
+    processor = DataProcessor("data/hvn data.xlsx")
     dfs = processor.load_and_normalize()
     validator = Validator(dfs)
     validator.run_checks()
