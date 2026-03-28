@@ -40,6 +40,15 @@ class Calculator:
     def _get_years(self, df):
         return [col for col in df.columns if col != 'Khoản mục']
 
+    def _average_balance(self, df, pattern, years):
+        row = self._get_row(df, pattern)
+        if row is None:
+            return pd.Series([np.nan]*len(years), index=years)
+        vals = row[years].astype(float)
+        shifted = vals.shift(1)
+        # Năm đầu tiên shift(1) là NaN -> kết quả trung bình là NaN
+        return (vals + shifted) / 2
+
     # =========================================================================
     # METHOD 1: Back-calculate missing variables (DSO, DIO, Nợ vay có lãi)
     # =========================================================================
@@ -53,6 +62,33 @@ class Calculator:
             return
 
         years = self._get_years(bs_df)
+        
+        # 0. Basic Accounting Identities for IS & BS
+        def fill_gap(df, target_pattern, formula_series):
+            row = self._get_row(df, target_pattern)
+            if row is not None:
+                vals = row[years].astype(float)
+                mask = (vals == 0) | vals.isna()
+                df.loc[row.name, years] = np.where(mask, formula_series, vals)
+
+        rev_row = self._get_row(is_df, r'^Doanh số thuần$')
+        cogs_row = self._get_row(is_df, r'^Giá vốn hàng bán$')
+        if rev_row is not None and cogs_row is not None:
+            gross_calc = rev_row[years].astype(float) - cogs_row[years].astype(float).abs()
+            fill_gap(is_df, r'^Lãi gộp$', gross_calc)
+
+        ebit_row = self._get_row(is_df, r'^EBIT$')
+        depr_row = self._get_row(self.dfs.get('CASH FLOW STATEMENT', pd.DataFrame()), r'^Khấu hao TSCĐ$')
+        if ebit_row is not None and depr_row is not None:
+            ebitda_calc = ebit_row[years].astype(float) + depr_row[years].astype(float).abs()
+            fill_gap(is_df, r'^EBITDA$', ebitda_calc)
+
+        ta_row = self._get_row(bs_df, r'^TỔNG TÀI SẢN$')
+        liab_row = self._get_row(bs_df, r'^NỢ PHẢI TRẢ$')
+        if ta_row is not None and liab_row is not None:
+            eq_calc = ta_row[years].astype(float) - liab_row[years].astype(float)
+            fill_gap(bs_df, r'^VỐN CHỦ SỞ HỮU$', eq_calc)
+
         new_rows = []
 
         try:
@@ -66,27 +102,94 @@ class Calculator:
                 row.update(debt_vals.to_dict())
                 new_rows.append(row)
 
-            # 2. DSO from turnover
-            rec_turnover = self._get_row(fi_df, r'Vòng quay các khoản phải thu')
-            if rec_turnover is not None:
-                trn = rec_turnover[years].replace(0, np.nan)
-                dso = 365 / trn
-                row = {'Khoản mục': 'DSO (Số ngày phải thu)'}
-                row.update(dso.fillna(0).to_dict())
-                new_rows.append(row)
+            # Khai báo các biến lấy từ is_df, bs_df để tính các Vòng quay và Số ngày
+            rev_row = self._get_row(is_df, r'^Doanh số thuần$')
+            cogs_row = self._get_row(is_df, r'^Giá vốn hàng bán$')
+            
+            if rev_row is not None and cogs_row is not None:
+                rev = rev_row[years].astype(float).replace(0, np.nan)
+                cogs = cogs_row[years].astype(float).abs().replace(0, np.nan)
+                
+                # Average balances
+                avg_recv = self._average_balance(bs_df, r'phải thu ngắn hạn của khách hàng|^Các khoản phải thu$', years)
+                avg_inv = self._average_balance(bs_df, r'^Hàng tồn kho', years)
+                # Dùng TỔNG CỘNG NGUỒN VỐN hoặc TỔNG TÀI SẢN để lấy Phải trả nếu không tìm thấy Phải trả người bán (thường là Nợ phải trả / Nợ ngắn hạn)
+                avg_pay = self._average_balance(bs_df, r'Phải trả người bán', years)
+                if avg_pay.isna().all():
+                    avg_pay = self._average_balance(bs_df, r'^Nợ ngắn hạn$', years)
 
-            # 3. DIO from turnover
-            inv_turnover = self._get_row(fi_df, r'Vòng quay hàng tồn kho')
-            if inv_turnover is not None:
-                inv = inv_turnover[years].replace(0, np.nan)
-                dio = 365 / inv
-                row = {'Khoản mục': 'DIO (Số ngày tồn kho)'}
-                row.update(dio.fillna(0).to_dict())
-                new_rows.append(row)
+                avg_ta = self._average_balance(bs_df, r'^TỔNG TÀI SẢN$', years)
+                avg_fa = self._average_balance(bs_df, r'^Tài sản cố định$', years)
+                avg_ca = self._average_balance(bs_df, r'^TÀI SẢN NGẮN HẠN$', years)
 
-            if new_rows:
-                new_df = pd.DataFrame(new_rows)
+                # Remove existing Turnover / DSO / DIO rows from fi_df to overwrite
+                drop_idx = fi_df[fi_df['Khoản mục'].str.contains(r'Vòng quay|DSO|DIO|Số ngày', case=False, na=False)].index
+                if not drop_idx.empty:
+                    fi_df.drop(index=drop_idx, inplace=True)
+
+                # Tính Vòng quay & Appending
+                trn_recv = (rev / avg_recv).replace([np.inf, -np.inf, 0], np.nan)
+                dso = 365 / trn_recv
+                trn_inv = (cogs / avg_inv).replace([np.inf, -np.inf, 0], np.nan)
+                dio = 365 / trn_inv
+                trn_pay = (cogs / avg_pay).replace([np.inf, -np.inf, 0], np.nan)
+                dpo = 365 / trn_pay
+                trn_fa = (rev / avg_fa).replace([np.inf, -np.inf, 0], np.nan)
+                trn_ta = (rev / avg_ta).replace([np.inf, -np.inf, 0], np.nan)
+                trn_ca = (rev / avg_ca).replace([np.inf, -np.inf, 0], np.nan)
+                
+                rows_to_add = [
+                    {'Khoản mục': 'Vòng quay các khoản phải thu (RTO)', **trn_recv.to_dict()},
+                    {'Khoản mục': 'Vòng quay hàng tồn kho (ITO)', **trn_inv.to_dict()},
+                    {'Khoản mục': 'Vòng quay các khoản phải trả (PTO)', **trn_pay.to_dict()},
+                    {'Khoản mục': 'Vòng quay tài sản cố định (FAT)', **trn_fa.to_dict()},
+                    {'Khoản mục': 'Vòng quay tổng tài sản (TAT)', **trn_ta.to_dict()},
+                    {'Khoản mục': 'Vòng quay vốn lưu động (WCT)', **trn_ca.to_dict()},
+                    {'Khoản mục': 'DSO (Số ngày phải thu)', **dso.to_dict()},
+                    {'Khoản mục': 'DIO (Số ngày tồn kho)', **dio.to_dict()},
+                    {'Khoản mục': 'DPO (Số ngày phải trả)', **dpo.to_dict()}
+                ]
+                
+                new_df = pd.DataFrame(rows_to_add)
                 self.dfs['FINANCIAL INDEX'] = pd.concat([fi_df, new_df], ignore_index=True)
+
+            # 4. Fill Market Ratio gaps (P/E, P/B, P/S, Vốn hóa)
+            fi_df = self.dfs.get('FINANCIAL INDEX')
+            ni_row = self._get_row(is_df, r'^Lãi/\(lỗ\) thuần sau thuế$')
+            eq_row = self._get_row(bs_df, r'^VỐN CHỦ SỞ HỮU$')
+            rev_row = self._get_row(is_df, r'^Doanh số thuần$')
+            cap_row = self._get_row(fi_df, r'^Vốn hóa$|Market Cap')
+
+            if cap_row is not None:
+                cap = cap_row[years].astype(float)
+                
+                if ni_row is not None:
+                    ni = ni_row[years].astype(float).replace(0, np.nan)
+                    pe_calc = cap / ni
+                    # Update P/E if missing (0 or NaN)
+                    pe_row = self._get_row(fi_df, r'^P/E$')
+                    if pe_row is not None:
+                        pe_vals = pe_row[years].astype(float)
+                        mask = (pe_vals == 0) | pe_vals.isna()
+                        fi_df.loc[pe_row.name, years] = np.where(mask, pe_calc, pe_vals)
+                
+                if eq_row is not None:
+                    eq = eq_row[years].astype(float).replace(0, np.nan)
+                    pb_calc = cap / eq
+                    pb_row = self._get_row(fi_df, r'^P/B$')
+                    if pb_row is not None:
+                        pb_vals = pb_row[years].astype(float)
+                        mask = (pb_vals == 0) | pb_vals.isna()
+                        fi_df.loc[pb_row.name, years] = np.where(mask, pb_calc, pb_vals)
+                
+                if rev_row is not None:
+                    rev = rev_row[years].astype(float).replace(0, np.nan)
+                    ps_calc = cap / rev
+                    ps_row = self._get_row(fi_df, r'^P/S$')
+                    if ps_row is not None:
+                        ps_vals = ps_row[years].astype(float)
+                        mask = (ps_vals == 0) | ps_vals.isna()
+                        fi_df.loc[ps_row.name, years] = np.where(mask, ps_calc, ps_vals)
 
         except Exception as e:
             print(f"Error in calculate_missing_variables: {e}")
@@ -190,23 +293,21 @@ class Calculator:
         years = self._get_years(fi_df)
         new_rows = []
 
-        # DPO
-        pay_turnover = self._get_row(fi_df, r'Vòng quay các khoản phải trả')
-        if pay_turnover is not None:
-            trn = pay_turnover[years].astype(float).replace(0, np.nan)
-            dpo = 365 / trn
-            row = {'Khoản mục': 'DPO (Số ngày phải trả)'}
-            row.update(dpo.fillna(0).to_dict())
-            new_rows.append(row)
+        # CCC = DIO + DSO - DPO
+        dso_row = self._get_row(fi_df, r'^DSO')
+        dio_row = self._get_row(fi_df, r'^DIO')
+        dpo_row = self._get_row(fi_df, r'^DPO')
+        
+        # Remove old CCC if it exists
+        drop_idx = fi_df[fi_df['Khoản mục'].str.contains(r'CCC|Chu kỳ tiền', case=False, na=False)].index
+        if not drop_idx.empty:
+            fi_df.drop(index=drop_idx, inplace=True)
 
-            # CCC = DIO + DSO - DPO
-            dso_row = self._get_row(fi_df, r'^DSO')
-            dio_row = self._get_row(fi_df, r'^DIO')
-            if dso_row is not None and dio_row is not None:
-                ccc = dso_row[years].astype(float) + dio_row[years].astype(float) - dpo.fillna(0)
-                row = {'Khoản mục': 'CCC (Chu kỳ tiền tính toán)'}
-                row.update(ccc.to_dict())
-                new_rows.append(row)
+        if dso_row is not None and dio_row is not None and dpo_row is not None:
+            ccc = dso_row[years].astype(float) + dio_row[years].astype(float) - dpo_row[years].astype(float)
+            row = {'Khoản mục': 'CCC (Chu kỳ tiền tính toán)'}
+            row.update(ccc.to_dict())
+            new_rows.append(row)
 
         if new_rows:
             new_df = pd.DataFrame(new_rows)
@@ -506,14 +607,16 @@ class Calculator:
 
         ni = ni_row[years].astype(float)
         rev = rev_row[years].astype(float).replace(0, np.nan)
-        ta = ta_row[years].astype(float).replace(0, np.nan)
-        eq = eq_row[years].astype(float).replace(0, np.nan)
+        
+        # Lấy SỐ DƯ BÌNH QUÂN thay vì cuối kỳ
+        ta_avg = self._average_balance(bs_df, r'^TỔNG TÀI SẢN$', years).replace(0, np.nan)
+        eq_avg = self._average_balance(bs_df, r'^VỐN CHỦ SỞ HỮU$', years).replace(0, np.nan)
 
         # === ROE DuPont (3 nhân tố) ===
-        ros = (ni / rev * 100).fillna(0)
-        at = (rev / ta).fillna(0)
-        leverage = (ta / eq).fillna(0)
-        roe_dupont = (ros / 100 * at * leverage * 100).fillna(0)
+        ros = (ni / rev * 100) # Biên lợi nhuận ròng (Net Profit Margin / ROS)
+        at = (rev / ta_avg)
+        leverage = (ta_avg / eq_avg)
+        roe_dupont = (ros / 100 * at * leverage * 100)
 
         dupont_rows = [
             {'Khoản mục': 'ROS (Biên LN ròng %)', **ros.to_dict()},
@@ -528,11 +631,11 @@ class Calculator:
             ebit = ebit_row[years].astype(float).replace(0, np.nan)
             ebt = ebt_row[years].astype(float).replace(0, np.nan)
 
-            tax_burden = (ni / ebt).fillna(0)           # NI / EBT
-            interest_burden = (ebt / ebit).fillna(0)     # EBT / EBIT
-            ebit_margin = (ebit / rev * 100).fillna(0)   # EBIT / Revenue (%)
-            # ROA_dupont = tax_burden × interest_burden × ebit_margin/100 × at × 100
-            roa_dupont = (tax_burden * interest_burden * ebit_margin / 100 * at * 100).fillna(0)
+            tax_burden = (ni / ebt)           # NI / EBT
+            interest_burden = (ebt / ebit)     # EBT / EBIT
+            ebit_margin = (ebit / rev * 100)   # EBIT / Revenue (%)
+            # ROA_dupont = tax_burden × interest_burden × ebit_margin/100 × at_avg × 100
+            roa_dupont = (tax_burden * interest_burden * ebit_margin / 100 * at * 100)
 
             roa_rows = [
                 {'Khoản mục': 'Tax Burden (NI/EBT)', **tax_burden.to_dict()},
@@ -556,12 +659,17 @@ class Calculator:
                 ib_debt = debt_row[years].astype(float)
             else:
                 ib_debt = pd.Series([0.0]*len(years), index=years)
-            ic = eq.fillna(0) + ib_debt
-            ic = ic.replace(0, np.nan)
+            
+            eq_current = eq_row[years].astype(float)
+            ic_current = eq_current.fillna(0) + ib_debt
+            
+            # Tính Invested Capital bình quân
+            ic_shifted = ic_current.shift(1)
+            ic_avg = ((ic_current + ic_shifted) / 2).replace(0, np.nan)
 
-            nopat_margin = (nopat / rev * 100).fillna(0)
-            ic_turnover = (rev / ic).fillna(0)
-            roic_dupont = (nopat_margin / 100 * ic_turnover * 100).fillna(0)
+            nopat_margin = (nopat / rev * 100)
+            ic_turnover = (rev / ic_avg)
+            roic_dupont = (nopat_margin / 100 * ic_turnover * 100)
 
             roic_rows = [
                 {'Khoản mục': 'NOPAT Margin (%)', **nopat_margin.to_dict()},
@@ -746,7 +854,7 @@ class Calculator:
 
 if __name__ == "__main__":
     from data_processor import DataProcessor
-    processor = DataProcessor("data/hvn_data.xlsx")
+    processor = DataProcessor("data/hvn.xlsx")
     dfs = processor.load_and_normalize()
     calc = Calculator(dfs)
     result = calc.run_all()

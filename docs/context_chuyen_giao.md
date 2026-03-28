@@ -11,7 +11,7 @@
 
 Xây dựng một hệ thống **tự động hóa phân tích tài chính** dựa trên:
 - **Tài liệu thiết kế gốc:** [giúp tôi lập 1 bảng ma trận phân cấp và logic tín....md](file:///c:/chương_trình_phân_tich/giúp%20tôi%20lập%201%20bảng%20ma%20trận%20phân%20cấp%20và%20logic%20tín....md) — Chứa ma trận phân cấp (BS/IS/CF), 5 module kiến trúc, 5 nhóm chỉ số tài chính (~30 công thức), và logic kiểm định.
-- **Dữ liệu:** [hvn data.xlsx](file:///c:/chương_trình_phân_tich/hvn/hvn%20data.xlsx) — 4 sheets: `BALANCE SHEET`, `INCOME STATEMENT`, `CASH FLOW STATEMENT`, `FINANCIAL INDEX`. Dữ liệu 5 năm (2021–2025).
+- **Data Flow và Logic Flow:** chương trình xử lý dự liệu theo phương pháp tuyến tính qua từng module tuần tự. mỗi module đảm nhiệm 1 chức năng vai trò riêng nhưng output của module này là input của module kế tiếp. (Trừ 1 số module chuyên biệt như chạy song song hay kiểm tra chéo)
 
 ---
 
@@ -99,4 +99,95 @@ streamlit run app.py
 # Mở trình duyệt tại http://localhost:8501
 ```
 
-**Dependencies:** `pandas`, `numpy`, `openpyxl`, `streamlit`, `plotly`
+**Dependencies:** `pandas`, `numpy`, `openpyxl`, `streamlit`, `plotly`, `scikit-learn`, `statsmodels`
+
+---
+
+## 7. Chi tiết danh mục Trực quan hóa (Visualizations)
+
+Dưới đây là thống kê các loại biểu đồ và chỉ số tương ứng được triển khai trong `src/app.py`:
+
+### 7.1 Tab: Survival (Khả năng sinh tồn)
+- **Cơ cấu Nợ vs Vốn Chủ Sở Hữu**: `Grouped Bar Chart` (Nợ Phải Trả, Vốn Chủ Sở Hữu).
+- **Dòng tiền theo hoạt động**: `100% Stacked Area Chart` (OCF, ICF, FCF).
+- **Cấu trúc Tài sản**: `100% Stacked Bar Chart` (Các khoản mục tài sản ngắn hạn & dài hạn).
+- **Net Debt / EBITDA**: `Bar Chart` (Tỷ lệ Nợ ròng / EBITDA).
+- **Dòng tiền Thực Thu vs Thực Chi**: `Line + Marker + Bar Overlaid Chart` (Tổng Thu, Tổng Chi, Dòng tiền Ròng).
+
+### 7.2 Tab: Operating (Hiệu suất kinh doanh)
+- **Doanh thu vs Giá vốn**: `Line + Area Chart` (Doanh số thuần, Giá vốn hàng bán).
+- **Biên lợi nhuận qua các năm**: `Multi-Line Chart` (Biên LN gộp, Biên EBIT, Biên LN ròng).
+
+### 7.3 Tab: Financial Ratios (Chỉ số Tài chính)
+- **Hệ số định giá**: `Multi-Line Chart` (P/E, P/B, P/S).
+- **EV/EBITDA & P/CF**: `Multi-Line Chart` (EV/EBITDA, P/CF).
+- **ROE / ROA / ROIC (%)**: `Multi-Line Chart` (ROE, ROA, ROIC).
+- **DuPont 3 nhân tố ROE**: `Combo Bar-Line Chart` (ROS, AT, Lev dạng Bar vs ROE dạng Line).
+- **Phân rã ΔROE/ΔROA/ΔROIC**: `Grouped Bar Chart + Line` (Tác động nhân tố so với Δ Thực tế).
+- **DuPont ROA 4 nhân tố**: `4-Subplot Bar Charts` (Tax Burden, Interest Burden, EBIT Margin, AT).
+- **DuPont ROIC 2 nhân tố**: `2-Subplot Bar Charts` (NOPAT Margin, IC Turnover).
+- **Hệ số thanh khoản**: `Multi-Line Chart` (Current, Quick, Cash Ratios).
+- **Hệ số nợ**: `Multi-Line Chart` (D/E, Financial Leverage).
+- **Khả năng trả nợ**: `Multi-Line Chart` (Net Debt/EBITDA, ICR).
+- **Chu kỳ tiền tính toán (CCC)**: `Multi-Line Chart` (DSO, DIO, DPO, CCC).
+
+### 7.4 Tab: Anomaly (Phân tích Bất thường)
+- **Beneish M-Score**: `Gauge Chart` (Hiện tại) & `Line Chart` (Lịch sử).
+- **Altman Z''-Score**: `Gauge Chart` (Hiện tại) & `Line Chart` (Lịch sử).
+- **Sloan Accruals %**: `Gauge Chart` (Hiện tại) & `Bar Chart` (Lịch sử).
+
+### 7.5 Tab: Dự báo & ML (Advanced Analysis)
+- **Phân rã Chu kỳ STL**: `Line (Trend)`, `Bar (Seasonal)`, `Bar (Residual)`.
+- **Dải Định giá (Valuation Bands)**: `Line Chart with Bands` (Mean, ±1σ, ±2σ, Actual P/E).
+- **Ma trận Độ nhạy DCF**: `Heatmap` (WACC vs g).
+- **What-if ROE Simulator**: `Metric Delta Indicators` (Yêu cầu thay đổi ROS, AT, Lev).
+- **Lead-Lag Tương quan chéo**: `Heatmap` (Tương quan các nhân tố qua các độ trễ).
+- **Trọng số Nhân tố**: `Horizontal Bar Char` (PLSR VIP Scores, ElasticNet Coefficients).
+- **Sensitivity Line**: `Multi-Line Chart` (ROA hiện tại vs Kịch bản Tích cực/Tiêu cực).
+
+---
+
+## 8. Kế hoạch Tu chỉnh & Nâng cấp (Phase 2)
+
+Dưới đây là kế hoạch chi tiết để chuyển đổi hệ thống sang kiến trúc **Business Model-driven Dashboard**, đảm bảo giữ nguyên toàn bộ dữ liệu trực quan hiện có (`~30 charts`) và tuân thủ logic thiết lập trước đó.
+
+### 8.1 Chuẩn hóa Logic Tính toán
+- **Tính vòng quay (Turnover)**: Chuyển đổi toàn bộ công thức sang số dư bình quân 2 kỳ (`Average Balance`) — Áp dụng cho FAT, ITO, RTO, PTO, WCT, TAT.
+- **Tỷ suất sinh lời**: Cập nhật mẫu số là Vốn bình quân (Equity Average, Total Assets Average, Invested Capital Average) để phản ánh chính xác hiệu suất ROE, ROA, ROIC.
+
+### 8.2 Tái cấu trúc Module & Luồng dữ liệu (Data Flow)
+- **Module `business_classifier.py`**: Chạy sau `calculator.py` để nhận diện mẫu hình từ metrics định lượng.
+- **Module `ui_architect.py` & `ui_templates.py`**: Điều phối việc chọn `Template` hiển thị dựa trên mẫu hình được phân loại.
+
+### 8.3 Cơ cấu lại Nhóm/Thẻ Biểu đồ (Reorganization) — KHÔNG XÓA BIỂU ĐỒ
+Toàn bộ biểu đồ hiện có trong Tab Survival, Operating, Ratios sẽ được phân phối lại vào 3 Tab bắt buộc và các Tab chuyên biệt động:
+
+1.  **Tab 1: 📊 Cơ cấu Tài chính (Bắt buộc)**
+    - Giữ nguyên: `Cấu trúc tài sản (100% Stacked Bar)`, `Nợ/VCSH (Grouped Bar)`, `Net Debt/EBITDA (Bar)`.
+    - Di chuyển từ Survival: `Thực thu - Thực chi (Line/Bar Overlaid)`.
+    
+2.  **Tab 2: 🔍 Chất lượng BCTC (Bắt buộc)**
+    - Tập trung tất cả: `Gauge Charts` (Beneish, Altman, Sloan) và `Line/Bar Charts` (Historical Scores) từ Tab Anomaly.
+    
+3.  **Tab 3: 💡 Kết luận Mẫu hình & Dẫn chứng (Bắt buộc)**
+    - Hiển thị kết luận phân loại doanh nghiệp.
+    - Dẫn chứng bằng các biểu đồ `Indicator/Delta` hoặc `Metrics` (PPE/TA, Gross Margin, v.v.) hiện đang phân tán.
+
+4.  **Tab 4: ⚡/🛒 Hiệu suất Mẫu hình (Chuyên biệt - Theo Mẫu hình)**
+    - Di chuyển các biểu đồ Ratios tương ứng từ Tab Operating và Financial Ratios vào đây:
+        - *Thâm dụng vốn*: `FAT (Line)`, `D/E (Line)`, `ROE (3-factor DuPont Combo)`.
+        - *Bán lẻ*: `ITO (Line)`, `Quick Ratio (Line)`, `CCC (Line)`.
+        - *Nhẹ tài sản*: `NPM (Line/Area)`, `ROE (Line)`, `AT (Line)`.
+
+5.  **Tab 5: 🤖 Phân tích Nâng cao (Giữ nguyên cấu trúc ML)**
+    - STL, Valuation Bands, DCF Heatmap, ROE What-if, Lead-lag, VIP/ElasticNet, Sensitivity Line.
+
+6.  **Tab 6: 📁 Bảng dữ liệu (Giữ nguyên)**
+
+### 8.4 Logic chọn Biểu đồ (Guidelines)
+Tiếp tục tuân thủ các nguyên tắc đã thống nhất trong Mục 3 và Mục 7:
+- **100% Stacked Bar**: Dành cho cấu trúc tỷ trọng BS (Assets/Capital structure).
+- **100% Stacked Area**: Dành cho tỷ trọng dòng tiền qua các năm.
+- **Multi-Line + Marker**: Dành cho các tỷ số biên lợi nhuận, định giá và khả năng trả nợ.
+- **Gauge Chart**: Dành cho đánh giá rủi ro tức thời (năm mới nhất).
+- **Đơn vị tính**: Đảm bảo 100% biểu đồ có đơn vị rõ ràng (`tỷ VND`, `%`, `vòng`, `x`).

@@ -1,0 +1,33 @@
+=== FINANCIAL INDEX Items ===
+Chu kỳ tiền
+Lợi nhuận sau thuế của Cổ đông công ty mẹ
+Tăng trưởng lợi nhuận (%)
+Doanh thu
+Tăng trưởng doanh thu (%)
+Vốn hóa
+EPS (VND)
+P/E
+P/B
+P/S
+P/Cash Flow
+Số CP lưu hành
+EV/EBITDA
+BVPS (VND)
+Chỉ số thanh toán tiền mặt
+Nợ/VCSH
+ROE (%)
+ROA (%)
+Số ngày thu tiền bình quân
+Số ngày tồn kho bình quân
+Chỉ số thanh toán nhanh
+Số ngày thanh toán bình quân
+Biên lợi nhuận gộp (%)
+Biên EBIT (%)
+Biên lợi nhuận ròng (%)
+Chỉ số thanh toán hiện thời
+Quay vòng tài sản
+(Vay NH + DH)/VCSH
+Đòn bẩy tài chính
+ROIC (%)
+Khả năng chi trả lãi vay
+Vòng quay TSCĐ

@@ -9,6 +9,7 @@ from calculator import Calculator
 from validator import Validator
 from forecaster import Forecaster
 from ml_analyzer import MLAnalyzer
+from business_classifier import BusinessClassifier
 
 st.set_page_config(page_title="HVN Financial Analytics", layout="wide", page_icon="✈️")
 
@@ -57,11 +58,13 @@ COLORS = {
 }
 
 @st.cache_data
-def load_data(_v=3):  # bump _v to invalidate old cache
-    processor = DataProcessor("data/hvn_data.xlsx")
+def load_data(_v=4):  # bump _v to invalidate old cache
+    processor = DataProcessor("data/hvn.xlsx")
     dfs = processor.load_and_normalize()
     calc = Calculator(dfs)
-    return calc.run_all()
+    dfs = calc.run_all()
+    classifier = BusinessClassifier(dfs)
+    return classifier.run_all()
 
 @st.cache_data
 def load_forecaster_data(_dfs):
@@ -128,9 +131,15 @@ def main():
     years = [c for c in bs.columns if c != 'Khoản mục']
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "Survival", "Operating", "Financial Ratios", "Anomaly",
-        "Data Tables", "Dự báo & ML"
+        "📊 Cơ cấu Tài chính", "🔍 Chất lượng BCTC", "💡 Kết luận Mẫu hình",
+        "⚡ Hiệu suất Mẫu hình", "🤖 Phân tích Nâng cao", "📁 Bảng dữ liệu"
     ])
+    
+    bm_data = dfs.get('BUSINESS_MODEL', {})
+    model_name = bm_data.get('Mô hình', 'Chưa phân loại')
+    model_evidence = bm_data.get('Minh chứng', '')
+    metrics = bm_data.get('Metrics', {})
+
 
     # ═══════════════════════════════════════════════════════════════════════
     # TAB 1: SURVIVAL DASHBOARD
@@ -261,10 +270,31 @@ def main():
                 st.plotly_chart(fig_ci, use_container_width=True)
 
     # ═══════════════════════════════════════════════════════════════════════
-    # TAB 2: OPERATING DASHBOARD
+
     # ═══════════════════════════════════════════════════════════════════════
-    with tab2:
-        st.header("Hiệu suất kinh doanh")
+    # TAB 3: KẾT LUẬN MẪU HÌNH
+    # ═══════════════════════════════════════════════════════════════════════
+    with tab3:
+        st.header("💡 Kết luận Mẫu hình & Dẫn chứng định lượng")
+        
+        st.info(f"**Kết luận:** Doanh nghiệp thuộc mẫu hình **{model_name}**.")
+        st.success(f"**Dẫn chứng lý luận:** {model_evidence}")
+        
+        col_m1, col_m2, col_m3 = st.columns(3)
+        col_m1.metric("Tỷ trọng TSCĐ / Tổng TS", f"{metrics.get('fa_to_ta', 0):.1f}%")
+        col_m2.metric("Biên LN Gộp", f"{metrics.get('gross_margin', 0):.1f}%")
+        col_m3.metric("Chi phí BH / Doanh thu", f"{metrics.get('sell_to_rev', 0):.1f}%")
+        
+        col_m4, col_m5, col_m6 = st.columns(3)
+        col_m4.metric("Khấu hao / Doanh thu", f"{metrics.get('depr_to_rev', 0):.1f}%")
+        col_m5.metric("Hàng tồn kho / Tổng TS", f"{metrics.get('inv_to_ta', 0):.1f}%")
+        col_m6.metric("Phải thu / Tổng TS", f"{metrics.get('recv_to_ta', 0):.1f}%")
+
+    # TAB 4: HIỆU SUẤT MẪU HÌNH (Operating)
+    # ═══════════════════════════════════════════════════════════════════════
+    with tab4:
+        st.header(f"Hiệu suất Mẫu hình: {model_name}")
+        st.markdown(f"**Minh chứng phân loại:** {model_evidence}")
         col3, col4 = st.columns(2)
 
         with col3:
@@ -296,9 +326,9 @@ def main():
                 st.plotly_chart(fig_margin, use_container_width=True)
 
     # ═══════════════════════════════════════════════════════════════════════
-    # TAB 3: FINANCIAL RATIOS
+    # Tiếp tục TAB 4
     # ═══════════════════════════════════════════════════════════════════════
-    with tab3:
+        st.divider()
         st.header("Chỉ số Tài chính Tổng hợp")
 
         # --- 3.1 Valuation ---
@@ -514,11 +544,27 @@ def main():
                                    "Cash Conversion Cycle & Components", years, 'ngày')
         st.plotly_chart(fig_eff, use_container_width=True)
 
+        st.subheader("Chỉ số Vòng quay (Turnovers) - Theo Mẫu hình")
+        ito = get_fi_row(fi, r'Vòng quay hàng tồn kho')
+        fat = get_fi_row(fi, r'Vòng quay tài sản cố định')
+        at = get_fi_row(fi, r'Vòng quay tổng tài sản')
+        
+        if 'Bán lẻ' in model_name and ito is not None:
+            st.plotly_chart(plot_line_multi({'ITO': ito}, "Vòng quay Tồn kho (ITO)", years, 'vòng'), use_container_width=True)
+        elif 'Thâm dụng vốn' in model_name and fat is not None:
+            st.plotly_chart(plot_line_multi({'FAT': fat}, "Vòng quay TSCĐ (FAT)", years, 'vòng'), use_container_width=True)
+        elif 'Nhẹ tài sản' in model_name and at is not None:
+            st.plotly_chart(plot_line_multi({'AT': at}, "Vòng quay Tổng TS (AT)", years, 'vòng'), use_container_width=True)
+        else:
+            if at is not None:
+                st.plotly_chart(plot_line_multi({'AT': at, 'FAT': fat, 'ITO': ito}, "Các chỉ số vòng quay chính", years, 'vòng'), use_container_width=True)
+
+
     # ═══════════════════════════════════════════════════════════════════════
-    # TAB 4: ANOMALY ANALYSIS
+    # TAB 2: CHẤT LƯỢNG BCTC (Anomaly)
     # ═══════════════════════════════════════════════════════════════════════
-    with tab4:
-        st.header("Phân tích Bất thường (Beneish · Altman · Sloan)")
+    with tab2:
+        st.header("🔍 Chất lượng BCTC (Beneish · Altman · Sloan)")
 
         if anomaly_numeric:
             anom_years = anomaly_numeric.get('years', [])
@@ -620,10 +666,10 @@ def main():
             st.info("Không đủ dữ liệu để tính Anomaly Scores.")
 
     # ═══════════════════════════════════════════════════════════════════════
-    # TAB 5: DATA TABLES
+    # TAB 6: DATA TABLES
     # ═══════════════════════════════════════════════════════════════════════
-    with tab5:
-        st.header("Bảng dữ liệu chi tiết")
+    with tab6:
+        st.header("📁 Bảng dữ liệu chi tiết")
         table_choice = st.selectbox("Chọn bảng dữ liệu:", [
             'BS — Tỷ trọng (Vertical)',
             'IS — Common-Size (Vertical)',
@@ -669,8 +715,8 @@ def main():
     # ═══════════════════════════════════════════════════════════════════════
     # TAB 5: DỰ BÁO & ML
     # ═══════════════════════════════════════════════════════════════════════
-    with tab6:
-        st.header("Phân tích Nâng cao — Cấu trúc, Chu kỳ & ML")
+    with tab5:
+        st.header("🤖 Phân tích Nâng cao — Cấu trúc, Chu kỳ & ML")
         st.markdown("""
 <div class="info-box">
 Triết lý: Không dự báo điểm. Tập trung vào <b>bóc tách cấu trúc</b> và <b>mô phỏng kịch bản</b>

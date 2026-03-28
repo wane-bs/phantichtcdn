@@ -15,39 +15,75 @@ class DataProcessor:
             
         xls = pd.ExcelFile(self.file_path)
         
-        for sheet in self.sheets:
-            actual_sheet = sheet
-            if sheet == 'BALANCE SHEET' and 'BALANCE SHEEET' in xls.sheet_names:
-                actual_sheet = 'BALANCE SHEEET'
-                
-            if actual_sheet not in xls.sheet_names:
-                print(f"Lưu ý: Sheet '{actual_sheet}' không tồn tại trong file Excel. Các sheet hiện có: {xls.sheet_names}")
+        # Mapping for resilience
+        sheet_map = {
+            'BALANCE SHEET': ['BALANCE SHEET', 'BALANCE SHEEET', 'bs'],
+            'CASH FLOW STATEMENT': ['CASH FLOW STATEMENT', 'cf'],
+            'INCOME STATEMENT': ['INCOME STATEMENT', 'is'],
+            'FINANCIAL INDEX': ['FINANCIAL INDEX', 'fi']
+        }
+        
+        for canonical_name, options in sheet_map.items():
+            actual_sheet = None
+            for opt in options:
+                if opt in xls.sheet_names:
+                    actual_sheet = opt
+                    break
+            
+            if not actual_sheet:
+                print(f"Lưu ý: Không tìm thấy sheet cho '{canonical_name}' (đã tìm: {options}). Các sheet hiện có: {xls.sheet_names}")
                 continue
                 
             df = pd.read_excel(xls, sheet_name=actual_sheet)
             
-            # Đổi tên cột đầu tiên thành 'Khoản mục'
-            cols = df.columns.tolist()
-            if len(cols) > 0:
-                df.rename(columns={cols[0]: 'Khoản mục'}, inplace=True)
+            # Collapse interleaved rows (Title row followed by 'HVN' value row)
+            # Pattern: Row N has 'Doanh thu', Row N+1 has 'HVN'
+            cleaned_rows = []
+            skip_next = False
             
-            # Strip whitespace in item names
-            if 'Khoản mục' in df.columns:
-                df['Khoản mục'] = df['Khoản mục'].astype(str).str.strip()
+            # Rename first column to a standard name for processing
+            first_col = df.columns[0]
+            df.rename(columns={first_col: 'Khoản mục'}, inplace=True)
+            df['Khoản mục'] = df['Khoản mục'].astype(str).str.strip()
+
+            for i in range(len(df)):
+                if skip_next:
+                    skip_next = False
+                    continue
+                
+                name = df.iloc[i]['Khoản mục']
+                # If next row is 'HVN', it contains the values for current name
+                if i < len(df) - 1:
+                    next_item = str(df.iloc[i+1]['Khoản mục']).strip()
+                    if next_item == 'HVN' and name != 'HVN':
+                        # Use current name but next row's values
+                        combined_row = df.iloc[i+1].copy()
+                        combined_row['Khoản mục'] = name
+                        cleaned_rows.append(combined_row)
+                        skip_next = True
+                        continue
+                
+                # If this is a normal row (not a header-value pair), keep it unless it's a standalone HVN
+                if name != 'HVN':
+                    cleaned_rows.append(df.iloc[i])
             
-            # Fill NaN values with 0.0 for numeric calculation
-            # Chú ý: Cột 'Khoản mục' không điền 0
+            df = pd.DataFrame(cleaned_rows)
+            
+            # Strip whitespace in item names again to be safe
+            df['Khoản mục'] = df['Khoản mục'].astype(str).str.strip()
+            
+            # Fill NaN values with 0.0 for numeric columns
             for col in df.columns:
                 if col != 'Khoản mục':
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
                     
-            self.dataframes[sheet] = df
+            self.dataframes[canonical_name] = df
             
         return self.dataframes
 
 if __name__ == "__main__":
     # Test read
-    processor = DataProcessor("data/hvn_data.xlsx")
+    processor = DataProcessor("data/hvn_fixed.xlsx")
     dfs = processor.load_and_normalize()
     for name, df in dfs.items():
         print(f"--- {name} ---")
