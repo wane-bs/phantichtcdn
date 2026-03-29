@@ -81,6 +81,16 @@ class DataProcessor:
             
         return self.dataframes
 
+    def save_outputs(self, out_dir="output/1_processed"):
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+            
+        for name, df in self.dataframes.items():
+            filename = f"{name}.csv"
+            filepath = os.path.join(out_dir, filename)
+            df.to_csv(filepath, index=False)
+            print(f"Saved: {filepath}")
+
 if __name__ == "__main__":
     # Test read
     processor = DataProcessor("data/hvn_fixed.xlsx")

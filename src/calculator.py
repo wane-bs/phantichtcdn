@@ -24,11 +24,19 @@ BS_HIERARCHY = {
 }
 
 class Calculator:
-    def __init__(self, dfs_dict):
+    def __init__(self, dfs_dict=None, in_dir=None):
         """
-        Input: Dictionary of DataFrames {'BALANCE SHEET': df, 'INCOME STATEMENT': df, ...}
+        Input: Dictionary of DataFrames or directory path containing CSVs from stage 1.
         """
-        self.dfs = dfs_dict
+        import os
+        if in_dir and os.path.exists(in_dir):
+            self.dfs = {}
+            for f in os.listdir(in_dir):
+                if f.endswith('.csv'):
+                    name = f.replace('.csv', '')
+                    self.dfs[name] = pd.read_csv(os.path.join(in_dir, f))
+        else:
+            self.dfs = dfs_dict or {}
 
     def _get_row(self, df, pattern):
         """Helper to get a row by regex pattern."""
@@ -850,14 +858,139 @@ class Calculator:
         self.calculate_anomaly_scores()
         self.dupont_analysis()
         self.dupont_factor_impact()
+        self.calculate_dynamic_liquidity_and_cashflow()
+        self._clean_distorted_metrics()
         return self.dfs
+
+    def _clean_distorted_metrics(self):
+        bs_df = self.dfs.get('BALANCE SHEET')
+        fi_df = self.dfs.get('FINANCIAL INDEX')
+        dupont = self.dfs.get('DUPONT')
+        
+        if bs_df is None: return
+        years = self._get_years(bs_df)
+        eq_row = self._get_row(bs_df, r'^VỐN CHỦ SỞ HỮU$')
+        if eq_row is None: return
+        
+        eq_vals = eq_row[years].astype(float)
+        mask_negative = eq_vals < 0
+        
+        if fi_df is not None:
+            # Các khoản mục cần ẩn khi VCSH âm
+            targets = [r'^ROE', r'Nợ phải trả / Vốn chủ sở hữu|D/E', r'Đòn bẩy tài chính']
+            for t in targets:
+                row = self._get_row(fi_df, t)
+                if row is not None:
+                    fi_df.loc[row.name, years] = np.where(mask_negative, np.nan, fi_df.loc[row.name, years])
+                    
+        if dupont is not None:
+            targets_dp = [r'^ROE', r'^Financial Leverage']
+            for t in targets_dp:
+                row = self._get_row(dupont, t)
+                if row is not None:
+                    dupont.loc[row.name, years] = np.where(mask_negative, np.nan, dupont.loc[row.name, years])
+
+    def calculate_dynamic_liquidity_and_cashflow(self):
+        bs_df = self.dfs.get('BALANCE SHEET')
+        is_df = self.dfs.get('INCOME STATEMENT')
+        cf_df = self.dfs.get('CASH FLOW STATEMENT')
+        
+        if bs_df is None or is_df is None or cf_df is None:
+            return
+
+        years = self._get_years(bs_df)
+        
+        def _get(df, pat):
+            r = self._get_row(df, pat)
+            return r[years].astype(float) if r is not None else pd.Series([0]*len(years), index=years)
+
+        # Trích xuất
+        cfo = _get(cf_df, r'^Lưu chuyển tiền thuần từ các hoạt động sản xuất kinh doanh')
+        capex = _get(cf_df, r'^Tiền mua tài sản cố định').abs()
+        interest = _get(is_df, r'^Chi phí lãi vay$').abs()
+        
+        ebitda = _get(is_df, r'^EBITDA$')
+        nnh = _get(bs_df, r'^Nợ ngắn hạn$')
+        ndh = _get(bs_df, r'^Nợ dài hạn$')
+        cash = _get(bs_df, r'^Tiền và tương đương tiền')
+        
+        gross_debt = nnh + ndh
+
+        # 1. Các chỉ số phân tích cơ bản (Trọng tâm cấu trúc Nợ & Thanh khoản)
+        # Gross Debt / EBITDA
+        gd_ebitda = (gross_debt / ebitda.replace(0, np.nan))
+        
+        # CFO / Gross Debt
+        cfo_gd = (cfo / gross_debt.replace(0, np.nan))
+        
+        # DSCR (Debt Service Coverage Ratio): CFO / (Interest + Short-Term Debt)
+        # Giả định nợ ngắn hạn đầu kỳ là nghĩa vụ phải trả trong kỳ. Để đơn giản lấy NNH hiện tại.
+        debt_service = interest + nnh
+        dscr = (cfo / debt_service.replace(0, np.nan))
+
+        # 2. FCFF và FCFE Models
+        # FCFF (Free Cash Flow to Firm) = CFO - CAPEX (Công thức giản lược thực hành)
+        fcff = cfo - capex
+        
+        # FCFE (Free Cash Flow to Equity) = FCFF - Lãi vay + Vay ròng
+        # Vay ròng = Tiền vay mới - Tiền trả nợ vay
+        borrow_new = _get(cf_df, r'^Tiền thu được các khoản đi vay')
+        repay_debt = _get(cf_df, r'^Tiển trả các khoản đi vay').abs()
+        net_borrowing = borrow_new - repay_debt
+        fcfe = fcff - interest + net_borrowing
+
+        # 3. Dynamic Liquidity Stress-Testing
+        # Giả lập cú sốc: CFO giảm 30%, Lãi vay tăng 20%
+        stressed_cfo = cfo * 0.7
+        stressed_debt_service = (interest * 1.2) + nnh
+        stressed_dscr = (stressed_cfo / stressed_debt_service.replace(0, np.nan))
+        # Runway (Số tháng sinh tồn nếu CFO = 0): Cash / (Chi phí QLDN + Chi phí BH + Lãi vay + Đáo hạn nợ)/12
+        cogs = _get(is_df, r'^Giá vốn hàng bán').abs()
+        sg_a = _get(is_df, r'^Chi phí bán hàng').abs() + _get(is_df, r'^Chi phí quản lý').abs()
+        fixed_cash_burn = sg_a + interest # Bỏ COGS vì giả sử ngừng hđKD
+        monthly_burn = fixed_cash_burn / 12
+        runway_months = (cash / monthly_burn.replace(0, np.nan))
+
+        rows = [
+            {'Khoản mục': 'FCFF (CFO - Capex)', **fcff.to_dict()},
+            {'Khoản mục': 'FCFE (FCFF - Lãi vay + Vay ròng)', **fcfe.to_dict()},
+            {'Khoản mục': 'Gross Debt (Tổng nợ gộp)', **gross_debt.to_dict()},
+            {'Khoản mục': 'CFO / Gross Debt (%)', **(cfo_gd * 100).to_dict()},
+            {'Khoản mục': 'Gross Debt / EBITDA (x)', **gd_ebitda.to_dict()},
+            {'Khoản mục': 'DSCR (Khả năng trả nợ x)', **dscr.to_dict()},
+            {'Khoản mục': 'STRESS DSCR (CFO -30%, Lãi +20%)', **stressed_dscr.to_dict()},
+            {'Khoản mục': 'Liquidity Runway (Tháng)', **runway_months.to_dict()}
+        ]
+        
+        self.dfs['LIQUIDITY_CASHFLOW'] = pd.DataFrame(rows)
+
+    def save_outputs(self, out_dir="output/2_calculated"):
+        import os
+        import json
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+        for name, data in self.dfs.items():
+            if hasattr(data, 'to_csv'):
+                filename = f"{name}.csv"
+                filepath = os.path.join(out_dir, filename)
+                data.to_csv(filepath, index=False)
+                print(f"Saved: {filepath}")
+            elif isinstance(data, dict):
+                filename = f"{name}.json"
+                filepath = os.path.join(out_dir, filename)
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=4)
+                print(f"Saved: {filepath}")
 
 if __name__ == "__main__":
     from data_processor import DataProcessor
     processor = DataProcessor("data/hvn.xlsx")
-    dfs = processor.load_and_normalize()
-    calc = Calculator(dfs)
+    processor.load_and_normalize()
+    processor.save_outputs("output/1_processed")
+    
+    calc = Calculator(in_dir="output/1_processed")
     result = calc.run_all()
+    calc.save_outputs("output/2_calculated")
     
     print("=== Available DataFrames ===")
     for k in result:

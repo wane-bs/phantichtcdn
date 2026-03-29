@@ -11,7 +11,18 @@
 
 Xây dựng một hệ thống **tự động hóa phân tích tài chính** dựa trên:
 - **Tài liệu thiết kế gốc:** [giúp tôi lập 1 bảng ma trận phân cấp và logic tín....md](file:///c:/chương_trình_phân_tich/giúp%20tôi%20lập%201%20bảng%20ma%20trận%20phân%20cấp%20và%20logic%20tín....md) — Chứa ma trận phân cấp (BS/IS/CF), 5 module kiến trúc, 5 nhóm chỉ số tài chính (~30 công thức), và logic kiểm định.
-- **Data Flow và Logic Flow:** chương trình xử lý dự liệu theo phương pháp tuyến tính qua từng module tuần tự. mỗi module đảm nhiệm 1 chức năng vai trò riêng nhưng output của module này là input của module kế tiếp. (Trừ 1 số module chuyên biệt như chạy song song hay kiểm tra chéo)
+- **Data Flow và Logic Flow:** Chương trình xử lý dữ liệu theo phương pháp tuyến tính qua từng module tuần tự. Mỗi module đảm nhiệm một chức năng, vai trò độc lập nhưng tuân thủ quy tắc kiến trúc pipeline chặt chẽ.
+
+### 1.1 Quy tắc Phát triển Module (Core Rules)
+
+Nhằm đảm bảo tính đồng bộ, tách bạch và dễ dàng trong việc bảo trì hệ thống, tất cả các logic pipeline phải tuân thủ nghiêm ngặt quy tắc sau:
+
+1. **Chuỗi cung ứng dữ liệu (I/O Chain):** Output của module này bắt buộc phải là Input của module kế tiếp trong chuỗi pipeline phân tích.
+2. **Định dạng Output Tiêu chuẩn:** Mỗi một module khi thực thi chức năng thay đổi trạng thái dữ liệu **bắt buộc phải sinh ra file output với định dạng cụ thể** (chủ yếu là `.csv` đối với dữ liệu bảng hoặc `.json` đối với dữ liệu object/metadata) và lưu vào thư mục `output/` ở từng phân luồng (`1_processed`, `2_calculated`, v.v). Tuyệt đối hạn chế việc truyền state trung gian qua bộ nhớ RAM mà không lưu lại dấu vết file.
+3. **Trường hợp Ngoại lệ:** Quy tắc chuỗi I/O khép kín này sẽ TỰ ĐỘNG được miễn trừ cho các trường hợp:
+   - Các module mang tính chất đặc thù, chạy độc lập để crawl báo cáo hoặc set up môi trường (vd: Data Scraper).
+   - Các module được thiết kế kiến trúc để chạy song song (Parallel tasks).
+   - Các module mang nhiệm vụ kiểm tra chéo hệ thống, monitor độc lập (vd: `validator.py`).
 
 ---
 

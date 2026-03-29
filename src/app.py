@@ -8,8 +8,11 @@ from data_processor import DataProcessor
 from calculator import Calculator
 from validator import Validator
 from forecaster import Forecaster
-from ml_analyzer import MLAnalyzer
+import os
 from business_classifier import BusinessClassifier
+
+# Lấy thư mục gốc ('hvn') thay vì thay đổi CWD toàn cục do dễ làm lỗi Streamlit Watchdog
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 st.set_page_config(page_title="HVN Financial Analytics", layout="wide", page_icon="✈️")
 
@@ -58,23 +61,35 @@ COLORS = {
 }
 
 @st.cache_data
-def load_data(_v=4):  # bump _v to invalidate old cache
-    processor = DataProcessor("data/hvn.xlsx")
-    dfs = processor.load_and_normalize()
-    calc = Calculator(dfs)
-    dfs = calc.run_all()
-    classifier = BusinessClassifier(dfs)
-    return classifier.run_all()
+def load_data(_v=7):  # bump _v to invalidate old cache
+    import os
+    import json
+    dfs = {}
+    calc_dir = os.path.join(PROJECT_ROOT, "output/2_calculated")
+    
+    if os.path.exists(calc_dir):
+        for f in os.listdir(calc_dir):
+            name = f.replace('.csv', '').replace('.json', '')
+            if f.endswith('.csv'):
+                dfs[name] = pd.read_csv(os.path.join(calc_dir, f))
+            elif f.endswith('.json'):
+                with open(os.path.join(calc_dir, f), 'r', encoding='utf-8') as file:
+                    dfs[name] = json.load(file)
+    else:
+        # Fallback if pipeline not run yet
+        st.warning("Dữ liệu chưa có sẵn trong output/. Vui lòng bấm 'Chạy Pipeline' ở sidebar.")
+        
+    cls_file = os.path.join(PROJECT_ROOT, "output/3_classification/business_model.json")
+    if os.path.exists(cls_file):
+        with open(cls_file, 'r', encoding='utf-8') as file:
+            dfs['BUSINESS_MODEL'] = json.load(file)
+            
+    return dfs
 
 @st.cache_data
 def load_forecaster_data(_dfs):
     f = Forecaster(_dfs)
     return f.run_all(), f
-
-@st.cache_data
-def load_ml_data(_dfs):
-    m = MLAnalyzer(_dfs)
-    return m.run_all(), m
 
 def get_row_data(df, pattern):
     row = df[df['Khoản mục'].str.contains(pattern, case=False, na=False, regex=True)]
@@ -105,10 +120,30 @@ def plot_line_multi(data_dict, title, years, y_suffix=''):
 
 
 def main():
+    # Custom Sidebar with Pipeline Runner
+    with st.sidebar:
+        st.header("⚙️ Quản lý Dữ liệu")
+        st.markdown("Hệ thống hoạt động với kiến trúc File-based Pipeline.")
+        if st.button("🚀 Chạy Pipeline Cập nhật Dữ liệu", use_container_width=True):
+            import subprocess
+            import sys
+            with st.spinner("Đang chạy pipeline... (vui lòng đợi vài giây)"):
+                try:
+                    pipe_script = os.path.join(PROJECT_ROOT, "src", "pipeline_runner.py")
+                    subprocess.run([sys.executable, pipe_script], cwd=PROJECT_ROOT, check=True)
+                    st.success("Cập nhật dữ liệu thành công!")
+                    load_data.clear() # Invalidate cache
+                    load_forecaster_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Lỗi pipeline: {e}")
+
     st.title("Vietnam Airlines (HVN) — Financial Analytics Dashboard")
 
     try:
         dfs = load_data()
+        if not dfs:
+            return
     except Exception as e:
         st.error(f"Error loading data: {e}")
         return
@@ -130,15 +165,20 @@ def main():
     anomaly_numeric = dfs.get('ANOMALY_NUMERIC', {})
     years = [c for c in bs.columns if c != 'Khoản mục']
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📊 Cơ cấu Tài chính", "🔍 Chất lượng BCTC", "💡 Kết luận Mẫu hình",
-        "⚡ Hiệu suất Mẫu hình", "🤖 Phân tích Nâng cao", "📁 Bảng dữ liệu"
+        "⚡ Hiệu suất Mẫu hình", "🤖 Phân tích Nâng cao", "📁 Bảng dữ liệu", "📄 Báo cáo Tổng hợp"
     ])
     
     bm_data = dfs.get('BUSINESS_MODEL', {})
-    model_name = bm_data.get('Mô hình', 'Chưa phân loại')
-    model_evidence = bm_data.get('Minh chứng', '')
-    metrics = bm_data.get('Metrics', {})
+    historical_models = bm_data.get('Lịch sử Mô hình', {})
+    core_model = bm_data.get('Mô hình cốt lõi', 'Chưa phân loại')
+    core_logic = bm_data.get('Minh chứng', '')
+    shift_analysis = bm_data.get('Dịch chuyển', '')
+    health_eval = bm_data.get('Sức khỏe Tài chính', 'Chưa đánh giá')
+    recommendation = bm_data.get('Khuyến nghị Đầu tư', 'Chưa có khuyến nghị')
+    ref_year = bm_data.get('Năm tham chiếu', years[-1] if years else '')
+    metrics = historical_models.get(str(ref_year), {}).get('Metrics', {}) if historical_models else {}
 
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -275,11 +315,36 @@ def main():
     # TAB 3: KẾT LUẬN MẪU HÌNH
     # ═══════════════════════════════════════════════════════════════════════
     with tab3:
-        st.header("💡 Kết luận Mẫu hình & Dẫn chứng định lượng")
+        st.header("💡 Kết luận Mô hình Cốt lõi (5 năm)")
         
-        st.info(f"**Kết luận:** Doanh nghiệp thuộc mẫu hình **{model_name}**.")
-        st.success(f"**Dẫn chứng lý luận:** {model_evidence}")
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            if "Rủi ro bao trùm" in recommendation or "KHÔNG" in recommendation:
+                st.error(f"🚨 **Khuyến nghị:** {recommendation}\n\n**Sức khỏe tài chính:** {health_eval}")
+            elif "CÂN NHẮC" in recommendation or "THEO DÕI" in recommendation:
+                st.warning(f"⚠️ **Khuyến nghị:** {recommendation}\n\n**Sức khỏe tài chính:** {health_eval}")
+            else:
+                st.success(f"✅ **Khuyến nghị:** {recommendation}\n\n**Sức khỏe tài chính:** {health_eval}")
         
+        with col_c2:
+            st.info(f"**Mô hình cốt lõi:** {core_model}\n\n**Minh chứng quy luật:** {core_logic}")
+            st.info(f"**Dịch chuyển:** {shift_analysis}")
+
+        st.subheader("Diễn biến Mô hình Kinh doanh Qua các năm")
+        if historical_models:
+            timeline_years = sorted(list(historical_models.keys()))
+            hist_models_list = [historical_models[y]['Mô hình'] for y in timeline_years]
+            fig_tl = go.Figure(go.Scatter(
+                x=timeline_years, y=hist_models_list, mode='lines+markers',
+                line=dict(color=COLORS['cyan'], width=2),
+                marker=dict(size=12, symbol='square')
+            ))
+            fig_tl.update_layout(**DARK_TEMPLATE, height=300, yaxis=dict(visible=False), margin=dict(l=20, r=20, t=30, b=20))
+            for i, (yr, mod) in enumerate(zip(timeline_years, hist_models_list)):
+                fig_tl.add_annotation(x=yr, y=mod, text=mod.split(' (')[0], showarrow=False, yshift=15, font=dict(color='white', size=11))
+            st.plotly_chart(fig_tl, use_container_width=True)
+
+        st.subheader(f"Chỉ số Định lượng Đặc trưng (Năm {ref_year})")
         col_m1, col_m2, col_m3 = st.columns(3)
         col_m1.metric("Tỷ trọng TSCĐ / Tổng TS", f"{metrics.get('fa_to_ta', 0):.1f}%")
         col_m2.metric("Biên LN Gộp", f"{metrics.get('gross_margin', 0):.1f}%")
@@ -293,8 +358,8 @@ def main():
     # TAB 4: HIỆU SUẤT MẪU HÌNH (Operating)
     # ═══════════════════════════════════════════════════════════════════════
     with tab4:
-        st.header(f"Hiệu suất Mẫu hình: {model_name}")
-        st.markdown(f"**Minh chứng phân loại:** {model_evidence}")
+        st.header(f"Hiệu suất Mẫu hình: {core_model}")
+        st.markdown(f"**Minh chứng cốt lõi:** {core_logic}")
         col3, col4 = st.columns(2)
 
         with col3:
@@ -549,11 +614,11 @@ def main():
         fat = get_fi_row(fi, r'Vòng quay tài sản cố định')
         at = get_fi_row(fi, r'Vòng quay tổng tài sản')
         
-        if 'Bán lẻ' in model_name and ito is not None:
+        if 'Bán lẻ' in core_model and ito is not None:
             st.plotly_chart(plot_line_multi({'ITO': ito}, "Vòng quay Tồn kho (ITO)", years, 'vòng'), use_container_width=True)
-        elif 'Thâm dụng vốn' in model_name and fat is not None:
+        elif 'Thâm dụng vốn' in core_model and fat is not None:
             st.plotly_chart(plot_line_multi({'FAT': fat}, "Vòng quay TSCĐ (FAT)", years, 'vòng'), use_container_width=True)
-        elif 'Nhẹ tài sản' in model_name and at is not None:
+        elif 'Nhẹ tài sản' in core_model and at is not None:
             st.plotly_chart(plot_line_multi({'AT': at}, "Vòng quay Tổng TS (AT)", years, 'vòng'), use_container_width=True)
         else:
             if at is not None:
@@ -713,24 +778,21 @@ def main():
             st.warning(f"Không tìm thấy dữ liệu cho '{table_choice}'.")
 
     # ═══════════════════════════════════════════════════════════════════════
-    # TAB 5: DỰ BÁO & ML
+    # TAB 5: DỰ BÁO & THANH KHOẢN
     # ═══════════════════════════════════════════════════════════════════════
     with tab5:
-        st.header("🤖 Phân tích Nâng cao — Cấu trúc, Chu kỳ & ML")
+        st.header("🤖 Phân tích Nâng cao — Thanh khoản & Dòng tiền")
         st.markdown("""
 <div class="info-box">
-Triết lý: Không dự báo điểm. Tập trung vào <b>bóc tách cấu trúc</b> và <b>mô phỏng kịch bản</b>
-để trả lời "tại sao ROE thay đổi" và "nếu thay đổi nhân tố X thì Y sẽ ra sao".
+Triết lý: Phân tích <b>Cấu trúc Dòng Tiền</b> và đánh giá khả năng sinh tồn của doanh nghiệp dưới các <b>cú sốc thanh khoản</b>.
 </div>""", unsafe_allow_html=True)
 
         try:
             f_results, forecaster_obj = load_forecaster_data(dfs)
-            ml_results, ml_obj = load_ml_data(dfs)
         except Exception as e:
-            st.error(f"Lỗi khởi tạo module phân tích: {e}")
-            f_results, ml_results = {}, {}
+            st.error(f"Lỗi khởi tạo module dự báo: {e}")
+            f_results = {}
             forecaster_obj = Forecaster(dfs)
-            ml_obj = MLAnalyzer(dfs)
 
         # ---- 5.1 STL DECOMPOSITION ----
         st.subheader("1. Phân rã Chu kỳ STL (Trend / Seasonal / Residual)")
@@ -898,130 +960,124 @@ Gordon Growth Model đơn giản hóa.
             else:
                 st.warning("Không đủ dữ liệu DuPont để mô phỏng What-if ROE.")
 
+        # ---- 5.5 LIQUIDITY & GROSS DEBT ----
         st.divider()
+        st.subheader("💧 5. Phân tích Dòng tiền & Cấu trúc Nợ gộp")
+        lcf_df = dfs.get('LIQUIDITY_CASHFLOW')
+        if lcf_df is not None:
+            lcf_years = [c for c in lcf_df.columns if c != 'Khoản mục']
+            
+            c_l1, c_l2 = st.columns(2)
+            with c_l1:
+                # Flow Metrics
+                fcff = get_row_data(lcf_df, r'^FCFF')
+                fcfe = get_row_data(lcf_df, r'^FCFE')
+                if fcff is not None and fcfe is not None:
+                    fig_fc = plot_line_multi({'FCFF': fcff, 'FCFE': fcfe}, "Dòng tiền Tự do (FCFF vs FCFE)", lcf_years, 'tỷ VND')
+                    st.plotly_chart(fig_fc, use_container_width=True)
+            
+            with c_l2:
+                # Debt Metrics
+                cfo_gd = get_row_data(lcf_df, r'^CFO / Gross Debt')
+                gd_ebitda = get_row_data(lcf_df, r'^Gross Debt / EBITDA')
+                if cfo_gd is not None and gd_ebitda is not None:
+                    fig_gd = make_subplots(specs=[[{"secondary_y": True}]])
+                    fig_gd.add_trace(go.Bar(x=lcf_years, y=cfo_gd, name='CFO/Gross Debt (%)', marker_color=COLORS['teal']), secondary_y=False)
+                    fig_gd.add_trace(go.Scatter(x=lcf_years, y=gd_ebitda, name='Gross Debt/EBITDA (x)', mode='lines+markers', line=dict(color=COLORS['orange'])), secondary_y=True)
+                    fig_gd.update_layout(title="Khả năng trả nợ lõi", **DARK_TEMPLATE)
+                    st.plotly_chart(fig_gd, use_container_width=True)
+            
+            st.divider()
+            
+            st.subheader("🔥 6. Khung Kiểm tra Sức chịu đựng Thanh khoản Động (Stress-Test)")
+            st.markdown('<div class="info-box">Giả lập kịch bản Sốc: <b>CFO giảm 30%, Lãi vay tăng 20%</b>. Đánh giá Runway (số tháng sinh tồn nếu đứt gãy dòng tiền).</div>', unsafe_allow_html=True)
+            
+            c_s1, c_s2 = st.columns(2)
+            with c_s1:
+                dscr = get_row_data(lcf_df, r'^DSCR \(Khả năng')
+                stressed_dscr = get_row_data(lcf_df, r'^STRESS DSCR')
+                if dscr is not None and stressed_dscr is not None:
+                    fig_dscr = go.Figure()
+                    fig_dscr.add_trace(go.Scatter(x=lcf_years, y=dscr, name='DSCR (Bình thường)', mode='lines+markers', line=dict(color=COLORS['green'])))
+                    fig_dscr.add_trace(go.Scatter(x=lcf_years, y=stressed_dscr, name='DSCR (Sốc 30%)', mode='lines+markers', line=dict(color=COLORS['red'], dash='dot')))
+                    fig_dscr.add_hline(y=1.0, line_dash='dash', line_color='white', annotation_text='DSCR = 1 (Ranh giới)')
+                    fig_dscr.update_layout(title='Chỉ số Bao phủ Nợ (DSCR)', **DARK_TEMPLATE)
+                    st.plotly_chart(fig_dscr, use_container_width=True)
+                    
+            with c_s2:
+                runway = get_row_data(lcf_df, r'^Liquidity Runway')
+                if runway is not None:
+                    fig_rw = go.Figure(go.Bar(x=lcf_years, y=runway, marker_color=COLORS['cyan'], text=[f"{v:.1f}T" if pd.notna(v) else "N/A" for v in runway], textposition='outside'))
+                    fig_rw.add_hline(y=12, line_dash='dash', line_color=COLORS['yellow'], annotation_text='1 Năm sinh tồn')
+                    fig_rw.update_layout(title='Liquidity Runway (Tháng sinh tồn tối đa)', **DARK_TEMPLATE)
+                    st.plotly_chart(fig_rw, use_container_width=True)
+        else:
+            st.info("Chưa có dữ liệu LIQUIDITY_CASHFLOW. Hãy chạy lại Pipeline.")
 
-        # ---- 5.5 CROSS-CORRELATION LEAD-LAG ----
-        st.subheader("🔗 5. Lead-Lag Heatmap (Tương quan chéo)")
-        ccf_result = ml_results.get('CCF_MATRIX')
-        if ccf_result is not None and not ccf_result.empty:
-            fig_ccf = go.Figure(go.Heatmap(
-                z=ccf_result.values.astype(float),
-                x=ccf_result.columns.tolist(),
-                y=ccf_result.index.tolist(),
-                colorscale='RdBu',
-                zmid=0,
-                text=ccf_result.values.round(2),
-                texttemplate='%{text:.2f}',
-                showscale=True,
-                colorbar=dict(title='r (Pearson)')
-            ))
-            fig_ccf.update_layout(
-                title='Tương quan giữa Đặc trưng & ROA tại các độ trễ (Lag)',
-                xaxis_title='Độ trễ (Lag âm = biến dẫn trước target)',
-                **DARK_TEMPLATE, height=350
-            )
-            st.plotly_chart(fig_ccf, use_container_width=True)
-            st.markdown(
-                '<div class="info-box"><b>Đọc kết quả:</b> Ô màu xanh đậm = tương quan thuận mạnh. '
-                'Lag âm (cột bên trái) = biến dẫn trước ROA → đây là leading indicators. '
-                'Lag 0 = đồng thời. Lag dương = biến phản ứng chậm hơn.</div>',
-                unsafe_allow_html=True
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # TAB 7: BÁO CÁO TỔNG HỢP
+    # ═══════════════════════════════════════════════════════════════════════
+    with tab7:
+        st.header("📄 Báo cáo Phân tích Tài chính Tổng hợp")
+        
+        report_path = os.path.join(PROJECT_ROOT, "bao_cao", "BaoCao_PhanTich_HVN.md")
+        
+        col_r1, col_r2 = st.columns([3, 1])
+        with col_r2:
+            if st.button("🔄 Tạo lại Báo cáo", use_container_width=True,
+                         help="Chạy lại Stage 5 (Report Generator) để cập nhật dữ liệu"):
+                import subprocess, sys
+                with st.spinner("Generating report..."):
+                    try:
+                        rg_script = os.path.join(PROJECT_ROOT, "src", "report_generator.py")
+                        subprocess.run(
+                            [sys.executable, rg_script],
+                            cwd=PROJECT_ROOT, check=True
+                        )
+                        st.success("✅ Đã tạo lại báo cáo thành công!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Lỗi: {e}")
+        
+        if os.path.exists(report_path):
+            with open(report_path, 'r', encoding='utf-8') as f:
+                report_md = f.read()
+            
+            with col_r1:
+                # Đọc metadata từ dòng đầu của file
+                first_lines = report_md.split('\n')[:3]
+                date_line = next((l for l in first_lines if 'Ngày trích xuất' in l), '')
+                st.caption(date_line.strip('*') if date_line else "")
+            
+            # Hiển thị báo cáo trong một khung đẹp
+            st.markdown("""
+<style>
+.report-container {
+    background: linear-gradient(135deg, rgba(15,52,96,0.15) 0%, rgba(26,26,46,0.3) 100%);
+    border: 1px solid rgba(15,52,96,0.4);
+    border-radius: 12px;
+    padding: 28px 36px;
+    margin-top: 8px;
+    line-height: 1.75;
+    font-size: 0.97em;
+}
+</style>""", unsafe_allow_html=True)
+            
+            st.markdown(f'<div class="report-container">', unsafe_allow_html=True)
+            st.markdown(report_md)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Nút tải xuống
+            st.download_button(
+                label="📥 Tải xuống Báo cáo (.md)",
+                data=report_md,
+                file_name="BaoCao_PhanTich_HVN.md",
+                mime="text/markdown",
+                use_container_width=False
             )
         else:
-            st.info("Không đủ dữ liệu để tính Cross-Correlation.")
-
-        st.divider()
-
-        # ---- 5.6 FACTOR IMPORTANCE ----
-        st.subheader("⚖️ 6. Trọng số Nhân tố (PLSR VIP & ElasticNet)")
-        col_fi1, col_fi2 = st.columns(2)
-
-        with col_fi1:
-            vip_result = ml_results.get('VIP_SCORES')
-            if vip_result is not None and not vip_result.empty:
-                colors_vip = [COLORS['green'] if v > 1 else '#555' for v in vip_result['VIP Score']]
-                fig_vip = go.Figure(go.Bar(
-                    x=vip_result['VIP Score'],
-                    y=vip_result['Nhân tố'],
-                    orientation='h',
-                    marker_color=colors_vip,
-                    text=[f'{v:.3f}' for v in vip_result['VIP Score']],
-                    textposition='outside'
-                ))
-                fig_vip.add_vline(x=1.0, line_dash='dash', line_color=COLORS['red'],
-                                   annotation_text='VIP=1 (ngưỡng quan trọng)', annotation_position='top right')
-                fig_vip.update_layout(title='PLSR VIP Score (VIP > 1 = Quan trọng)',
-                                      **DARK_TEMPLATE, xaxis_title='VIP Score', height=350)
-                col_fi1.plotly_chart(fig_vip, use_container_width=True)
-            else:
-                col_fi1.info("Không đủ dữ liệu VIP.")
-
-        with col_fi2:
-            en_result = ml_results.get('ELASTICNET')
-            if en_result is not None:
-                coef_df = en_result['coef_df']
-                coef_colors = [COLORS['green'] if d == '+' else (COLORS['red'] if d == '-' else '#555')
-                               for d in coef_df['Chiều tác động']]
-                fig_en = go.Figure(go.Bar(
-                    x=coef_df['Hệ số ElasticNet'],
-                    y=coef_df['Nhân tố'],
-                    orientation='h',
-                    marker_color=coef_colors,
-                    text=[f"{r['Chiều tác động']}{r['Hệ số ElasticNet']:.4f}" for _, r in coef_df.iterrows()],
-                    textposition='outside'
-                ))
-                fig_en.add_vline(x=0, line_dash='dash', line_color='white')
-                fig_en.update_layout(
-                    title=f'Hệ số ElasticNet (α={en_result["alpha"]:.4f}, L1={en_result["l1_ratio"]:.2f})',
-                    **DARK_TEMPLATE, xaxis_title='Coefficient', height=350
-                )
-                col_fi2.plotly_chart(fig_en, use_container_width=True)
-            else:
-                col_fi2.info("Không đủ dữ liệu ElasticNet.")
-
-        st.divider()
-
-        # ---- 5.7 SENSITIVITY LINE ----
-        st.subheader("📉 7. Sensitivity Line — Mô phỏng Tác động Cấu trúc")
-        delta_pct_sel = st.select_slider(
-            "Mức thay đổi giả định của nhân tố (%)",
-            options=[5, 10, 15, 20, 25, 30], value=20,
-            key='sens_delta'
-        ) / 100
-
-        sens_result = ml_obj.sensitivity_line(delta_pct=delta_pct_sel)
-        if sens_result:
-            sens_df = sens_result['df']
-            fig_sens = go.Figure()
-            col_map = {
-                'Hiện tại': (COLORS['cyan'], 'solid', 3),
-                f'Tích cực (+{int(delta_pct_sel*100)}%)': (COLORS['green'], 'dot', 2),
-                f'Tiêu cực (-{int(delta_pct_sel*100)}%)': (COLORS['red'], 'dot', 2),
-            }
-            for col_name, (color, dash, width) in col_map.items():
-                if col_name in sens_df.columns:
-                    fig_sens.add_trace(go.Scatter(
-                        x=sens_df['Năm'], y=sens_df[col_name],
-                        name=col_name, mode='lines+markers',
-                        line=dict(color=color, dash=dash, width=width),
-                        marker=dict(size=8)
-                    ))
-            important = sens_result.get('important_features', [])
-            fig_sens.update_layout(
-                title=f'Sensitivity Line (±{int(delta_pct_sel*100)}%) · Nhân tố VIP cao: {", ".join(important[:3])}',
-                yaxis_title='ROA (%)',
-                **DARK_TEMPLATE,
-                legend=dict(orientation='h', y=-0.15)
-            )
-            st.plotly_chart(fig_sens, use_container_width=True)
-            st.markdown(
-                f'<div class="info-box"><b>Nhân tố VIP > 1 được dùng:</b> {", ".join(important)} — '
-                'Giả định tất cả nhân tố thay đổi đồng thời với cùng tỷ lệ. '
-                'Kết quả là ước lượng cấu trúc, không phải dự báo điểm.</div>',
-                unsafe_allow_html=True
-            )
-        else:
-            st.info("Không đủ dữ liệu để tính Sensitivity Line.")
+            st.info("Chưa có báo cáo nào. Hãy nhấn **🔄 Tạo lại Báo cáo** hoặc chạy Pipeline ở sidebar để tạo báo cáo tự động.")
 
 
 if __name__ == "__main__":

@@ -24,3 +24,10 @@ wheels/
 venv/
 ENV/
 .DS_Store
+
+# Project specific
+output/
+data/~$*
+.ipynb_checkpoints/
+.streamlit/
+! .streamlit/config.toml

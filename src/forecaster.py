@@ -22,8 +22,17 @@ except ImportError:
 
 
 class Forecaster:
-    def __init__(self, dfs_dict):
-        self.dfs = dfs_dict
+    def __init__(self, dfs_dict=None, in_dir=None):
+        import os
+        import pandas as pd
+        if in_dir and os.path.exists(in_dir):
+            self.dfs = {}
+            for f in os.listdir(in_dir):
+                if f.endswith('.csv'):
+                    name = f.replace('.csv', '')
+                    self.dfs[name] = pd.read_csv(os.path.join(in_dir, f))
+        else:
+            self.dfs = dfs_dict or {}
 
     def _get_row(self, df, pattern):
         row = df[df['Khoản mục'].str.contains(pattern, case=False, na=False, regex=True)]
@@ -308,6 +317,63 @@ class Forecaster:
             'latest_year': latest,
         }
         return result
+
+    def save_outputs(self, results, out_dir="output/4_advanced"):
+        import os
+        import json
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+
+        # Trích xuất và lưu riêng rẽ các components để đáp ứng yêu cầu CSV, JSON
+        if 'STL_REVENUE' in results:
+            stl = results['STL_REVENUE']
+            stl_df = pd.DataFrame({
+                'original': stl['original'],
+                'trend': stl['trend'],
+                'seasonal': stl['seasonal'],
+                'residual': stl['residual']
+            })
+            stl_df.index.name = 'Year'
+            stl_df.to_csv(os.path.join(out_dir, "stl_revenue.csv"))
+            with open(os.path.join(out_dir, "stl_method.json"), 'w') as f:
+                json.dump({'method': stl['method']}, f)
+                
+        if 'VALUATION_BANDS' in results:
+            vb = results['VALUATION_BANDS']
+            bands_df = pd.DataFrame({
+                'original': vb['original'],
+                'mean': [vb['mean']] * len(vb['years']),
+                'upper_1s': [vb['upper_1s']] * len(vb['years']),
+                'lower_1s': [vb['lower_1s']] * len(vb['years']),
+                'upper_2s': [vb['upper_2s']] * len(vb['years']),
+                'lower_2s': [vb['lower_2s']] * len(vb['years'])
+            }, index=vb['years'])
+            bands_df.index.name = 'Year'
+            bands_df.to_csv(os.path.join(out_dir, "valuation_bands.csv"))
+            with open(os.path.join(out_dir, "valuation_meta.json"), 'w') as f:
+                json.dump({'band_position': vb['band_position']}, f)
+
+        if 'DCF_MATRIX' in results:
+            dcf = results['DCF_MATRIX']
+            # Save matrix as CSV
+            dcf_df = pd.DataFrame(dcf['matrix'], index=dcf['wacc_labels'], columns=dcf['g_labels'])
+            dcf_df.index.name = 'WACC / g'
+            dcf_df.to_csv(os.path.join(out_dir, "dcf_matrix.csv"))
+            # Save meta as JSON
+            meta = {
+                'wacc_vals': list(dcf['wacc_vals']),
+                'g_vals': list(dcf['g_vals']),
+                'fcff_base': dcf['fcff_base']
+            }
+            with open(os.path.join(out_dir, "dcf_meta.json"), 'w') as f:
+                json.dump(meta, f)
+
+        if 'WHATIF_ROE' in results:
+            wi = results['WHATIF_ROE']
+            with open(os.path.join(out_dir, "whatif_roe.json"), 'w', encoding='utf-8') as f:
+                json.dump(wi, f, ensure_ascii=False, indent=4)
+                
+        print(f"Forecaster outputs saved to {out_dir}")
 
     # =========================================================================
     # RUN ALL
