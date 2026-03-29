@@ -1,85 +1,268 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <title>HVN Financial Analysis - Streamlit</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.1/build/stlite.css" />
-    <style>
-      body, html { height: 100%; margin: 0; padding: 0; background: #0e1117;}
-      #root { height: 100%; width: 100%; }
-      .loading-screen {
-        width: 100%; height: 100vh;
-        background-color: #0e1117; color: white;
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        font-family: sans-serif; text-align: center; padding: 20px; box-sizing: border-box;
-      }
-      .spinner {
-        border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #ff4b4b;
-        border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px;
-      }
-      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-      #error-log {
-        margin-top: 20px; color: #ff4b4b; max-width: 800px; text-align: left;
-        background: rgba(255,0,0,0.1); padding: 10px; border-radius: 5px; display: none;
-        white-space: pre-wrap; word-wrap: break-word; font-family: monospace;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="root">
-      <div class="loading-screen" id="loading-ui">
-        <div class="spinner" id="spinner"></div>
-        <h2 id="status-text">Đang khởi tạo môi trường Python (WebAssembly)...</h2>
-        <p>Có thể mất 15-40 giây trong lần tải đầu tiên để cài đặt thư viện lõi, vui lòng chờ nhé!</p>
-        <div id="error-log"></div>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <title>HVN Financial Analytics — Vietnam Airlines</title>
+  <meta name="description" content="Hệ thống phân tích tài chính đa chiều cho Vietnam Airlines (HVN). Altman Z-Score, Beneish M-Score, DuPont Analysis, Business Model Classification." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --red: #e94560;
+      --blue: #0f3460;
+      --bg: #09090f;
+      --surface: #12121e;
+      --surface2: #1a1a2e;
+      --border: rgba(15, 52, 96, 0.5);
+      --text: #e8e8f0;
+      --muted: #8888aa;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; }
+
+    /* ── Hero ── */
+    header {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 40px 20px;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(233,69,96,0.18) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 80% 110%, rgba(15,52,96,0.3) 0%, transparent 60%),
+        var(--bg);
+      position: relative; overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%230f3460' fill-opacity='0.08'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+      pointer-events: none;
+    }
+
+    .badge {
+      display: inline-block; padding: 4px 14px; background: rgba(233,69,96,0.15);
+      border: 1px solid rgba(233,69,96,0.4); border-radius: 999px;
+      font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em;
+      color: var(--red); text-transform: uppercase; margin-bottom: 24px;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.8rem); font-weight: 700; line-height: 1.1;
+      background: linear-gradient(135deg, #fff 30%, var(--red));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 20px;
+    }
+    .subtitle {
+      font-size: clamp(1rem, 2.5vw, 1.25rem); color: var(--muted); max-width: 620px;
+      line-height: 1.7; margin-bottom: 48px;
+    }
+
+    .cta-group { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 28px; border-radius: 10px; font-size: 0.95rem;
+      font-weight: 600; text-decoration: none; transition: all 0.25s ease; cursor: pointer;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--red), #c62a47);
+      color: #fff; border: none; box-shadow: 0 4px 24px rgba(233,69,96,0.35);
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(233,69,96,0.5); }
+    .btn-outline {
+      background: transparent; color: var(--text);
+      border: 1.5px solid var(--border);
+    }
+    .btn-outline:hover { border-color: var(--red); color: var(--red); transform: translateY(-2px); }
+
+    /* ── Stats bar ── */
+    .stats {
+      display: flex; gap: 48px; flex-wrap: wrap; justify-content: center;
+      margin-top: 64px; padding-top: 40px; border-top: 1px solid var(--border);
+      width: 100%; max-width: 700px;
+    }
+    .stat-item { text-align: center; }
+    .stat-number { font-size: 2rem; font-weight: 700; color: var(--red); }
+    .stat-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
+
+    /* ── Features cards ── */
+    section { padding: 80px 20px; max-width: 1100px; margin: 0 auto; }
+    .section-title {
+      text-align: center; font-size: 1.8rem; font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .section-sub { text-align: center; color: var(--muted); margin-bottom: 56px; font-size: 1rem; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 28px 24px;
+      transition: border-color 0.25s, transform 0.25s;
+    }
+    .card:hover { border-color: var(--red); transform: translateY(-4px); }
+
+    .card-icon { font-size: 2rem; margin-bottom: 16px; }
+    .card-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 10px; }
+    .card-desc { font-size: 0.88rem; color: var(--muted); line-height: 1.65; }
+
+    /* ── Setup section ── */
+    .setup-box {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 16px; padding: 36px 40px; margin-top: 80px;
+    }
+    .setup-box h2 { font-size: 1.5rem; margin-bottom: 8px; }
+    .setup-box .sub { color: var(--muted); margin-bottom: 32px; font-size: 0.9rem; }
+
+    .steps { display: flex; flex-direction: column; gap: 20px; }
+    .step {
+      display: flex; gap: 16px; align-items: flex-start;
+      background: var(--surface); border-radius: 10px; padding: 18px 20px;
+      border: 1px solid var(--border);
+    }
+    .step-num {
+      min-width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--red), #c62a47);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.85rem; color: #fff;
+    }
+    .step-content { flex: 1; }
+    .step-title { font-weight: 600; margin-bottom: 6px; }
+    .step-code {
+      background: #0a0a14; border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 14px;
+      font-family: 'Courier New', monospace; font-size: 0.85rem;
+      color: #a8d8a8; margin-top: 8px; overflow-x: auto;
+    }
+    .step-desc { color: var(--muted); font-size: 0.85rem; margin-top: 6px; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center; padding: 40px 20px;
+      border-top: 1px solid var(--border);
+      color: var(--muted); font-size: 0.83rem;
+    }
+    footer a { color: var(--red); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <!-- ═══ HERO ═══ -->
+  <header>
+    <span class="badge">✈️ Vietnam Airlines · HVN · Open Source</span>
+    <h1>HVN Financial<br/>Analytics Dashboard</h1>
+    <p class="subtitle">
+      Hệ thống phân tích tài chính đa chiều — Altman Z-Score, Beneish M-Score,
+      DuPont 3/4/2-Factor, Cash Flow Stress-Testing và Business Model Classification.
+    </p>
+    <div class="cta-group">
+      <a href="https://github.com/wane-bs/phantichtcdn" target="_blank" rel="noopener" class="btn btn-primary">
+        📦 Xem Source Code trên GitHub
+      </a>
+      <a href="bao_cao/BaoCao_PhanTich_HVN.md" class="btn btn-outline" target="_blank">
+        📄 Đọc Báo cáo mới nhất
+      </a>
+    </div>
+    <div class="stats">
+      <div class="stat-item">
+        <div class="stat-number">5</div>
+        <div class="stat-label">Stage Pipeline</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">7</div>
+        <div class="stat-label">Dashboard Tabs</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">3</div>
+        <div class="stat-label">Anomaly Models</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">5+</div>
+        <div class="stat-label">Năm dữ liệu</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══ FEATURES ═══ -->
+  <section>
+    <h2 class="section-title">Tính năng nổi bật</h2>
+    <p class="section-sub">Phân tích tài chính từ nhiều góc độ chuyên sâu, tự động hóa toàn pipeline</p>
+    <div class="grid">
+      <div class="card">
+        <div class="card-icon">🏥</div>
+        <div class="card-title">Kiểm tra Sức khỏe BCTC</div>
+        <div class="card-desc">Altman Z''-Score, Beneish M-Score và Sloan Accruals tự động phát hiện rủi ro phá sản và thao túng báo cáo tài chính.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">📊</div>
+        <div class="card-title">Phân rã DuPont 3/4/2 Nhân tố</div>
+        <div class="card-desc">Best-fit OLS xác định thứ tự phân rã tối ưu cho ROE, ROA 4-factor và ROIC 2-factor với Shapley attribution.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">💧</div>
+        <div class="card-title">Stress-Test Thanh khoản</div>
+        <div class="card-desc">Mô phỏng kịch bản sốc với CFO giảm 30%, tính DSCR và Liquidity Runway (số tháng sinh tồn).</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🤖</div>
+        <div class="card-title">Phân loại Mô hình KD</div>
+        <div class="card-desc">Tự động phân loại: Thâm dụng vốn, Bán lẻ, Nhẹ tài sản hay Đa ngành — kèm phân tích dịch chuyển lịch sử 5 năm.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🌡️</div>
+        <div class="card-title">Ma trận DCF Sensitivity</div>
+        <div class="card-desc">Heatmap giá trị nội tại theo WACC × g (Gordon Growth Model), kèm Valuation Bands và What-if ROE Simulator.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">📄</div>
+        <div class="card-title">Báo cáo Tự động (.md)</div>
+        <div class="card-desc">Stage 5 của Pipeline tự sinh báo cáo Markdown chuyên nghiệp từ toàn bộ kết quả phân tích — Executive Summary đến góc khuất.</div>
       </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.31.1/build/stlite.js"></script>
-    <script>
-      const errorLog = document.getElementById('error-log');
-      const statusText = document.getElementById('status-text');
-      const spinner = document.getElementById('spinner');
+    <!-- ═══ SETUP ═══ -->
+    <div class="setup-box">
+      <h2>🚀 Chạy Dashboard trên máy cục bộ</h2>
+      <p class="sub">Dashboard Streamlit yêu cầu Python backend. Thực hiện theo các bước sau:</p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-title">Clone repository</div>
+            <div class="step-code">git clone https://github.com/wane-bs/phantichtcdn.git<br/>cd phantichtcdn</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-title">Cài đặt thư viện</div>
+            <div class="step-code">pip install -r requirements.txt</div>
+            <div class="step-desc">Cần: Python 3.9+, pandas, plotly, streamlit, scikit-learn, openpyxl, statsmodels</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-title">Khởi chạy Dashboard</div>
+            <div class="step-code">streamlit run src/app.py</div>
+            <div class="step-desc">Mở trình duyệt tại <strong>http://localhost:8501</strong> — Nhấn nút <em>"🚀 Chạy Pipeline"</em> trên sidebar để cập nhật dữ liệu.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-      // Catch global errors (missing files, WASM memory issues, Pyodide install failures)
-      window.onerror = function(msg, url, lineNo, columnNo, error) {
-        errorLog.style.display = 'block';
-        spinner.style.display = 'none';
-        statusText.innerText = "Đã xảy ra lỗi nghiêm trọng trong quá trình tải!";
-        errorLog.innerText += `Lỗi: ${msg}\n`;
-        return false;
-      };
-      
-      window.addEventListener("unhandledrejection", function(event) {
-        errorLog.style.display = 'block';
-        spinner.style.display = 'none';
-        statusText.innerText = "Lỗi khi tải thư viện/file (Có thể do mạng, 404 hoặc giới hạn bộ nhớ WASM)";
-        errorLog.innerText += `Chi tiết: ${event.reason}\n`;
-      });
+  <!-- ═══ FOOTER ═══ -->
+  <footer>
+    <p>© 2026 HVN Financial Analytics · Built with <a href="https://streamlit.io" target="_blank">Streamlit</a> · 
+      Source: <a href="https://github.com/wane-bs/phantichtcdn" target="_blank">GitHub</a>
+    </p>
+  </footer>
 
-      const v = "?v=" + new Date().getTime(); 
-      try {
-        stlite.mount(
-          {
-            requirements: ["streamlit", "pandas", "numpy", "plotly", "openpyxl", "scikit-learn"],
-            entrypoint: "app.py",
-            files: {
-              "app.py": { url: "./src/app.py" + v },
-              "calculator.py": { url: "./src/calculator.py" + v },
-              "data_processor.py": { url: "./src/data_processor.py" + v },
-              "forecaster.py": { url: "./src/forecaster.py" + v },
-              "ml_analyzer.py": { url: "./src/ml_analyzer.py" + v },
-              "validator.py": { url: "./src/validator.py" + v },
-              "data/hvn_data.xlsx": { url: "./data/hvn_data.xlsx" + v }
-            }
-          },
-          document.getElementById("root")
-        );
-      } catch(e) {
-        window.onerror(e.message, null, null, null, e);
-      }
-    </script>
-  </body>
+</body>
 </html>
