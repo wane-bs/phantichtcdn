@@ -170,6 +170,7 @@ def main():
     dupont_betas_roa = dfs.get('DUPONT_BETAS_ROA', {})
     dupont_betas_roic = dfs.get('DUPONT_BETAS_ROIC', {})
     cash_inout = dfs.get('CASH_INOUT')
+    liquidity_cf = dfs.get('LIQUIDITY_CASHFLOW')
     anomaly_numeric = dfs.get('ANOMALY_NUMERIC', {})
     years = [c for c in bs.columns if c != 'Khoản mục']
 
@@ -198,19 +199,26 @@ def main():
 
         with col1:
             st.subheader("Cơ cấu Nợ vs Vốn Chủ Sở Hữu")
-            liabilities = get_row_data(bs, r'^NỢ PHẢI TRẢ$')
+            nnh = get_row_data(bs, r'^Nợ ngắn hạn$')
+            ndh = get_row_data(bs, r'^Nợ dài hạn$')
             equity = get_row_data(bs, r'^VỐN CHỦ SỞ HỮU$')
 
-            if liabilities is not None and equity is not None:
+            if nnh is not None and ndh is not None and equity is not None:
                 fig = go.Figure(data=[
-                    go.Bar(name='Nợ Phải Trả', x=years, y=liabilities,
-                           marker_color=COLORS['red'], opacity=0.85),
+                    go.Bar(name='Nợ ngắn hạn', x=years, y=nnh,
+                           marker_color=COLORS['red'], opacity=0.85,
+                           offsetgroup=0),
+                    go.Bar(name='Nợ dài hạn', x=years, y=ndh,
+                           marker_color=COLORS['orange'], opacity=0.75,
+                           offsetgroup=0, base=nnh),
                     go.Bar(name='Vốn Chủ Sở Hữu', x=years, y=equity,
-                           marker_color=COLORS['purple'], opacity=0.85)
+                           marker_color=COLORS['purple'], opacity=0.85,
+                           offsetgroup=1)
                 ])
                 fig.update_layout(
                     barmode='group', **DARK_TEMPLATE,
-                    title="VCSH âm nặng 2022-2024, phục hồi 2025",
+                    title="Cơ cấu Nguồn vốn: Nợ NH / Nợ DH / VCSH",
+                    legend=dict(orientation='h', y=-0.15, font=dict(size=10)),
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
@@ -316,6 +324,98 @@ def main():
                     barmode='overlay'
                 )
                 st.plotly_chart(fig_ci, use_container_width=True)
+
+        # ── DSCR & Liquidity Runway ──
+        if liquidity_cf is not None:
+            st.divider()
+            st.subheader("Diễn biến DSCR và Khoảng cách Sinh tồn (Liquidity Runway)")
+            liq_years = [c for c in liquidity_cf.columns if c != 'Khoản mục']
+            dscr_vals = get_row_data(liquidity_cf, r'^DSCR')
+            stressed_dscr = get_row_data(liquidity_cf, r'^STRESS DSCR')
+            runway_vals = get_row_data(liquidity_cf, r'^Liquidity Runway')
+
+            col_dscr, col_runway = st.columns(2)
+
+            with col_dscr:
+                if dscr_vals is not None:
+                    fig_dscr = go.Figure()
+                    # DSCR bars – color coded
+                    dscr_colors = [
+                        COLORS['green'] if v >= 1.5 else (COLORS['yellow'] if v >= 1.0 else COLORS['red'])
+                        for v in dscr_vals
+                    ]
+                    fig_dscr.add_trace(go.Bar(
+                        x=liq_years, y=dscr_vals, name='DSCR',
+                        marker_color=dscr_colors, opacity=0.85,
+                        text=[f'{v:.2f}x' for v in dscr_vals], textposition='outside'
+                    ))
+                    # Stressed DSCR line
+                    if stressed_dscr is not None:
+                        fig_dscr.add_trace(go.Scatter(
+                            x=liq_years, y=stressed_dscr, name='Stressed DSCR (CFO−30%)',
+                            mode='lines+markers',
+                            line=dict(color=COLORS['orange'], width=2.5, dash='dash'),
+                            marker=dict(size=8, symbol='diamond')
+                        ))
+                    # Threshold lines
+                    fig_dscr.add_hline(y=1.5, line_dash='dot', line_color=COLORS['green'],
+                                       annotation_text='An toàn 1.5x', annotation_position='top left',
+                                       annotation_font=dict(size=10, color=COLORS['green']))
+                    fig_dscr.add_hline(y=1.0, line_dash='dash', line_color='white', line_width=2,
+                                       annotation_text='Ranh giới 1.0x', annotation_position='bottom left',
+                                       annotation_font=dict(size=11, color='white'))
+                    fig_dscr.update_layout(
+                        title='DSCR — Khả năng tự phục vụ nợ bằng Dòng tiền',
+                        yaxis_title='DSCR (x)',
+                        **DARK_TEMPLATE,
+                        legend=dict(orientation='h', y=-0.2),
+                        barmode='overlay'
+                    )
+                    st.plotly_chart(fig_dscr, use_container_width=True)
+                    st.markdown(
+                        '<div class="info-box">'
+                        '<b>DSCR</b> = CFO / (Lãi vay + Nợ ngắn hạn). '
+                        '<b>&gt; 1.5x</b>: An toàn. <b>1.0–1.5x</b>: Biên mỏng. '
+                        '<b>&lt; 1.0x</b>: Phải vay đảo nợ để tồn tại. '
+                        'Đường cam = Stressed DSCR (CFO giảm 30%, lãi vay tăng 20%).'
+                        '</div>',
+                        unsafe_allow_html=True
+                    )
+
+            with col_runway:
+                if runway_vals is not None:
+                    fig_rw = go.Figure()
+                    rw_colors = [
+                        COLORS['green'] if v >= 12 else (COLORS['yellow'] if v >= 6 else COLORS['red'])
+                        for v in runway_vals
+                    ]
+                    fig_rw.add_trace(go.Bar(
+                        x=liq_years, y=runway_vals, name='Runway (tháng)',
+                        marker_color=rw_colors, opacity=0.85,
+                        text=[f'{v:.1f}' for v in runway_vals], textposition='outside'
+                    ))
+                    # Threshold zones
+                    fig_rw.add_hline(y=12, line_dash='dot', line_color=COLORS['green'],
+                                     annotation_text='12 tháng (An toàn)', annotation_position='top left',
+                                     annotation_font=dict(size=10, color=COLORS['green']))
+                    fig_rw.add_hline(y=6, line_dash='dash', line_color=COLORS['yellow'],
+                                     annotation_text='6 tháng (Cảnh báo)', annotation_position='bottom left',
+                                     annotation_font=dict(size=10, color=COLORS['yellow']))
+                    fig_rw.update_layout(
+                        title='Liquidity Runway — Số tháng Sinh tồn nếu ngừng Doanh thu',
+                        yaxis_title='Tháng',
+                        **DARK_TEMPLATE,
+                        legend=dict(orientation='h', y=-0.2)
+                    )
+                    st.plotly_chart(fig_rw, use_container_width=True)
+                    st.markdown(
+                        '<div class="info-box">'
+                        '<b>Liquidity Runway</b> = (Tiền mặt + ĐT ngắn hạn) / Chi phí cố định hàng tháng. '
+                        '<b>&gt; 12 tháng</b>: Đệm an toàn. <b>6–12 tháng</b>: Cần dự phòng. '
+                        '<b>&lt; 6 tháng</b>: Nguy hiểm tức thời.'
+                        '</div>',
+                        unsafe_allow_html=True
+                    )
 
     # ═══════════════════════════════════════════════════════════════════════
 
