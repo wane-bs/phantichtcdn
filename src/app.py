@@ -440,16 +440,35 @@ def main():
 
         st.subheader("Diễn biến Mô hình Kinh doanh Qua các năm")
         if historical_models:
-            timeline_years = sorted(list(historical_models.keys()))
-            hist_models_list = [historical_models[y]['Mô hình'] for y in timeline_years]
-            fig_tl = go.Figure(go.Scatter(
-                x=timeline_years, y=hist_models_list, mode='lines+markers',
+            _tl_keys = sorted(list(historical_models.keys()))
+            _tl_x = [f'Năm {y}' for y in _tl_keys]   # prefix để Plotly không parse thành số
+            _tl_models = [historical_models[y]['Mô hình'] for y in _tl_keys]
+            fig_tl = go.Figure(
+                layout=go.Layout(
+                    **DARK_TEMPLATE, height=320,
+                    xaxis=dict(type='category', tickangle=-30),
+                    yaxis=dict(visible=False, range=[-1.2, 1.2]),
+                    margin=dict(l=20, r=20, t=20, b=60)
+                )
+            )
+            fig_tl.add_trace(go.Scatter(
+                x=_tl_x, y=[0] * len(_tl_x),
+                mode='lines+markers',
                 line=dict(color=COLORS['cyan'], width=2),
-                marker=dict(size=12, symbol='square')
+                marker=dict(size=10, color=COLORS['cyan'], symbol='square'),
+                hovertemplate='<b>%{x}</b>: %{text}<extra></extra>',
+                text=_tl_models, showlegend=False
             ))
-            fig_tl.update_layout(**DARK_TEMPLATE, height=300, yaxis=dict(visible=False), margin=dict(l=20, r=20, t=30, b=20))
-            for i, (yr, mod) in enumerate(zip(timeline_years, hist_models_list)):
-                fig_tl.add_annotation(x=yr, y=mod, text=mod.split(' (')[0], showarrow=False, yshift=15, font=dict(color='white', size=11))
+            for idx, (xv, mod) in enumerate(zip(_tl_x, _tl_models)):
+                _ay = -55 if idx % 2 == 0 else 45
+                fig_tl.add_annotation(
+                    x=xv, y=0,
+                    text=f'<b>{_tl_keys[idx]}</b><br>{mod.split(" (")[0]}',
+                    showarrow=True, arrowhead=0, arrowcolor=COLORS['cyan'],
+                    ay=_ay, ax=0,
+                    font=dict(color='white', size=10),
+                    bgcolor='rgba(30,30,50,0.7)', bordercolor=COLORS['cyan'], borderwidth=1
+                )
             st.plotly_chart(fig_tl, use_container_width=True)
 
         st.subheader(f"Chỉ số Định lượng Đặc trưng (Năm {ref_year})")
@@ -498,11 +517,126 @@ def main():
                 }, "Biên lợi nhuận (% Doanh thu thuần)", vert_years, '%')
                 st.plotly_chart(fig_margin, use_container_width=True)
 
+        # ── OPERATING LEVERAGE CHART ──
+        st.divider()
+        st.subheader("⚡ Đòn bẩy Hoạt động (Operating Leverage) — Hiệu ứng Khuếch đại Lợi nhuận")
+        if revenue is not None and cogs is not None and is_vert is not None:
+            ebit_abs = get_row_data(is_df, r'^EBIT$')
+            depr = get_row_data(cf, r'^Khấu hao TSCĐ$')
+            sell_exp = get_row_data(is_df, r'^Chi phí bán hàng$')
+            admin_exp = get_row_data(is_df, r'^Chi phí quản lý')
+
+            if ebit_abs is not None:
+                # x labels: thêm prefix để Plotly không parse thành số
+                ol_x = [f'FY{y}' for y in years]
+
+                # Extract plain lists
+                rev_list = [float(revenue[y]) for y in years]
+                ebit_list = [float(ebit_abs[y]) for y in years]
+
+                fc_list = []
+                for y in years:
+                    v = 0.0
+                    for _src in [depr, sell_exp, admin_exp]:
+                        if _src is not None:
+                            v += abs(float(_src[y]))
+                    fc_list.append(v)
+
+                # Đơn vị: raw VND → nghìn tỷ VND (÷ 1e12)
+                SCALE = 1e12
+                rev_ntt = [v / SCALE for v in rev_list]
+                fc_ntt  = [v / SCALE for v in fc_list]
+                breakeven_ntt = 121.0  # 121,000 tỷ = 121 nghìn tỷ
+
+                # Tính DOL
+                dol_labels = ['']
+                for i in range(1, len(years)):
+                    try:
+                        pct_r = (rev_list[i] - rev_list[i-1]) / abs(rev_list[i-1]) * 100 if rev_list[i-1] else 0
+                        pct_e = (ebit_list[i] - ebit_list[i-1]) / abs(ebit_list[i-1]) * 100 if ebit_list[i-1] else 0
+                        dol = pct_e / pct_r if pct_r != 0 else 0
+                        dol_labels.append(f'DOL={dol:.1f}x')
+                    except Exception:
+                        dol_labels.append('')
+
+                # Biên EBIT % (từ IS_VERTICAL, đã là %)
+                ebit_margin_pct = get_row_data(is_vert, r'^EBIT$')
+                em_list = None
+                if ebit_margin_pct is not None:
+                    em_list = [float(ebit_margin_pct.get(y, np.nan)) for y in years]
+
+                # Vẽ chart với layout type='category' từ đầu
+                fig_ol = go.Figure(
+                    layout=go.Layout(
+                        title='Đòn bẩy Hoạt động — Khi DT vượt Break-even, Biên EBIT tăng theo cấp số nhân',
+                        barmode='overlay',
+                        **DARK_TEMPLATE,
+                        xaxis=dict(type='category', tickangle=-30),
+                        yaxis=dict(title='Nghìn tỷ VND', side='left'),
+                        yaxis2=dict(title='Biên EBIT (%)', side='right',
+                                    overlaying='y', showgrid=False, ticksuffix='%'),
+                        legend=dict(orientation='h', y=-0.22, font=dict(size=10)),
+                        height=480,
+                    )
+                )
+
+                fig_ol.add_trace(go.Bar(
+                    x=ol_x, y=rev_ntt,
+                    name='Doanh thu (nghìn tỷ VND)',
+                    marker_color='rgba(43,147,72,0.5)',
+                ))
+                fig_ol.add_trace(go.Bar(
+                    x=ol_x, y=fc_ntt,
+                    name='Định phí ước tính (nghìn tỷ VND)',
+                    marker_color='rgba(233,69,96,0.6)',
+                ))
+                if em_list is not None:
+                    fig_ol.add_trace(go.Scatter(
+                        x=ol_x, y=em_list,
+                        name='Biên EBIT (%)',
+                        mode='lines+markers',
+                        line=dict(color=COLORS['yellow'], width=3),
+                        marker=dict(size=9), yaxis='y2'
+                    ))
+
+                # Break-even line
+                fig_ol.add_shape(type='line', x0=-0.5, x1=len(ol_x)-0.5,
+                    y0=breakeven_ntt, y1=breakeven_ntt,
+                    line=dict(color=COLORS['cyan'], width=2, dash='dash'), yref='y')
+                fig_ol.add_annotation(x=ol_x[-1], y=breakeven_ntt, yref='y',
+                    text='Break-even ~121,000 tỷ', showarrow=False,
+                    yshift=10, font=dict(color=COLORS['cyan'], size=11))
+
+                # DOL annotations
+                for i in range(len(ol_x)):
+                    if dol_labels[i]:
+                        fig_ol.add_annotation(
+                            x=ol_x[i], y=rev_ntt[i], yref='y',
+                            text=dol_labels[i], showarrow=False, yshift=14,
+                            font=dict(
+                                color=COLORS['red'] if 'DOL=-' in dol_labels[i] else COLORS['orange'],
+                                size=10, family='monospace'
+                            )
+                        )
+
+                st.plotly_chart(fig_ol, use_container_width=True)
+                st.markdown(
+                    '<div class="info-box">'
+                    '<b>Đòn bẩy Hoạt động (DOL)</b> = %ΔEBIT / %ΔDoanh thu. '
+                    'DOL cao → Mỗi 1% tăng doanh thu tạo ra nhiều hơn 1% tăng lợi nhuận. '
+                    '<b>Cột xanh</b> = Doanh thu. <b>Cột đỏ</b> = Định phí (Khấu hao + SG&A). '
+                    '<b>Đường vàng</b> = Biên EBIT (trục phải). '
+                    '<b>Đường lam</b> = Ngưỡng doanh thu hòa vốn ~121,000 tỷ VND.'
+                    '</div>',
+                    unsafe_allow_html=True
+                )
+
     # ═══════════════════════════════════════════════════════════════════════
     # Tiếp tục TAB 4
     # ═══════════════════════════════════════════════════════════════════════
         st.divider()
         st.header("Chỉ số Tài chính Tổng hợp")
+
 
         # --- 3.1 Valuation ---
         st.subheader("1. Định giá (Valuation)")

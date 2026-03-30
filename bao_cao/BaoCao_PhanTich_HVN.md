@@ -1,5 +1,5 @@
 # BÁO CÁO PHÂN TÍCH TÀI CHÍNH TỔNG HỢP — VIETNAM AIRLINES (HVN)
-*Ngày trích xuất: 30/03/2026 11:45 | Năm phân tích: 2025*
+*Ngày trích xuất: 30/03/2026 16:56 | Năm phân tích: 2025*
 
 *Triết lý phân tích: Enterprise Value (EV) Framework — Tập trung Dòng tiền & Khả năng sinh tồn*
 
