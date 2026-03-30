@@ -865,30 +865,58 @@ class Calculator:
     def _clean_distorted_metrics(self):
         bs_df = self.dfs.get('BALANCE SHEET')
         fi_df = self.dfs.get('FINANCIAL INDEX')
+        is_df = self.dfs.get('INCOME STATEMENT')
         dupont = self.dfs.get('DUPONT')
         
-        if bs_df is None: return
+        warnings_dict = {}
+        
+        if bs_df is None or is_df is None: return
         years = self._get_years(bs_df)
+        
         eq_row = self._get_row(bs_df, r'^VỐN CHỦ SỞ HỮU$')
-        if eq_row is None: return
+        ni_row = self._get_row(is_df, r'^Lãi/\(lỗ\) thuần sau thuế$')
         
-        eq_vals = eq_row[years].astype(float)
-        mask_negative = eq_vals < 0
-        
+        mask_negative_eq = None
+        if eq_row is not None:
+            eq_vals = eq_row[years].astype(float)
+            mask_negative_eq = eq_vals < 0
+            neg_eq_years = eq_vals[mask_negative_eq].index.tolist()
+            if neg_eq_years:
+                warnings_dict['negative_equity_years'] = neg_eq_years
+                warnings_dict['equity_warning'] = f"VCSH âm các năm {', '.join(neg_eq_years)}. Các chỉ số ROE, P/B, Solvency bị cách ly an toàn."
+                
+        mask_negative_ni = None
+        if ni_row is not None:
+            ni_vals = ni_row[years].astype(float)
+            mask_negative_ni = ni_vals < 0
+            neg_ni_years = ni_vals[mask_negative_ni].index.tolist()
+            if neg_ni_years:
+                warnings_dict['negative_ni_years'] = neg_ni_years
+                warnings_dict['ni_warning'] = f"Lợi nhuận âm các năm {', '.join(neg_ni_years)}. Chỉ số P/E bị cách ly an toàn."
+
+        warnings_dict['active'] = bool(warnings_dict)
+        self.dfs['data_warnings'] = warnings_dict
+
         if fi_df is not None:
-            # Các khoản mục cần ẩn khi VCSH âm
-            targets = [r'^ROE', r'Nợ phải trả / Vốn chủ sở hữu|D/E', r'Đòn bẩy tài chính']
-            for t in targets:
-                row = self._get_row(fi_df, t)
-                if row is not None:
-                    fi_df.loc[row.name, years] = np.where(mask_negative, np.nan, fi_df.loc[row.name, years])
-                    
-        if dupont is not None:
+            if mask_negative_eq is not None:
+                targets_eq = [r'^ROE', r'^P/B', r'Nợ phải trả / Vốn chủ sở hữu|D/E', r'Đòn bẩy tài chính']
+                for t in targets_eq:
+                    row = self._get_row(fi_df, t)
+                    if row is not None:
+                        fi_df.loc[row.name, years] = np.where(mask_negative_eq, np.nan, fi_df.loc[row.name, years])
+            if mask_negative_ni is not None:
+                targets_ni = [r'^P/E']
+                for t in targets_ni:
+                    row = self._get_row(fi_df, t)
+                    if row is not None:
+                        fi_df.loc[row.name, years] = np.where(mask_negative_ni, np.nan, fi_df.loc[row.name, years])
+                        
+        if dupont is not None and mask_negative_eq is not None:
             targets_dp = [r'^ROE', r'^Financial Leverage']
             for t in targets_dp:
                 row = self._get_row(dupont, t)
                 if row is not None:
-                    dupont.loc[row.name, years] = np.where(mask_negative, np.nan, dupont.loc[row.name, years])
+                    dupont.loc[row.name, years] = np.where(mask_negative_eq, np.nan, dupont.loc[row.name, years])
 
     def calculate_dynamic_liquidity_and_cashflow(self):
         bs_df = self.dfs.get('BALANCE SHEET')

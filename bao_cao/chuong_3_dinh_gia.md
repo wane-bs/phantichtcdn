@@ -1,35 +1,63 @@
-# CHƯƠNG 3: Định giá & Thẩm định Rủi ro
+# CHƯƠNG 3: Định giá Doanh nghiệp — Enterprise Value Framework
 
-Việc định giá một hãng hàng không ngay sau khủng hoảng tồn vong là một bài toán phức tạp, do giá trị bị bóp méo bởi âm vốn chủ sở hữu và lợi nhuận thất thường. Trong chương này, chúng tôi áp dụng phương pháp định giá tương đối (Relative Valuation) dựa trên hai chỉ số phù hợp nhất: EV/EBITDA và P/S, đồng thời đánh giá rủi ro cấu trúc vốn hiện tại.
+Việc định giá một hãng hàng không ngay sau khủng hoảng tồn vong là bài toán phức tạp hàng đầu trong phân tích tài chính. Phương pháp truyền thống (P/E, P/B) đã **hoàn toàn mất hiệu lực** do vốn chủ sở hữu âm và lợi nhuận ròng thất thường. Chương này áp dụng **khung định giá Enterprise Value (EV)** — chuẩn mực quốc tế cho doanh nghiệp Distress/Turnaround.
 
-## 1. Phương pháp Định giá Phù hợp
-
-Vì sao không dùng P/B hay P/E?
-- **P/B (Price-to-Book):** Xuyên suốt giai đoạn 2022 - 2024, vốn chủ sở hữu (BV) của HVN âm sâu. Điều này khiến chỉ số P/B mất đi ý nghĩa toán học và kinh tế. Năm 2025, dù BV đã dương trợ lại nhẹ nhàng nhờ phương án phát hành thêm cổ phiếu cấn trừ nợ/tăng vốn, tỷ lệ P/B vẫn vọt lên quá cao (~11.39x), không phản ánh đúng giá trị tài sản.
-- **P/E (Price-to-Earnings):** Do lợi nhuận có tính chu kỳ cực mạnh (âm lớn trong bối cảnh Covid và vọt tăng dương 7.500 tỷ năm 2024), P/E sẽ đánh lừa nhà đầu tư về một cổ phiếu "rẻ" (~7.8x - 9.3x) mà quên đi rủi ro đi kèm.
-
-**Khuyến nghị: Sử dụng EV/EBITDA và P/S**
-- Ngành hàng không là ngành thâm dụng tài sản cố định (máy bay) dẫn đến chi phí khấu hao lớn, cấu trúc vốn vay lớn làm phát sinh chi phí lãi vay lớn. **EBITDA** (Lợi nhuận trước lãi vay, thuế và khấu hao) sẽ bóc tách các yếu tố này, phản ánh đúng luồng tiền hạt nhân cơ bản. Tương tự, **P/S** đo lường định giá thu nhập bất chấp lỗ ròng.
-
-### Số liệu Định giá Hiện tại (2024 - 2025)
-- **Chỉ số EV/EBITDA:** Đang giao dịch ở mức **6.39x (2024)** và **5.16x (2025)**. Trong lịch sử (2015-2019), HVN thường trực mức EV/EBITDA từ 8x đến 13x. So với các hãng hàng không trong khu vực, mức 5-6x hiện tại mang lại biên an toàn tương đối tốt cho giá trị doanh nghiệp tổng thể.
-- **Chỉ số P/S (Price-to-Sales):** Giữ ổn định ở mức **0.56x**. Mức này xấp xỉ mức định giá "hoàng kim" trước đại dịch năm 2017-2019 (khoảng 0.44x - 0.54x), cho thấy trị giá vốn hóa đang đi sát vào quy mô doanh thu phục hồi của hãng.
-
-## 2. Thẩm định Các Rủi ro Kép
-
-Dù mức định giá bằng EV/EBITDA tỏ ra hấp dẫn, một đợt phục hồi giá trị vốn hóa (Market Cap) cần vượt qua ba cạm bẫy cấu trúc:
-
-> [!WARNING]
-> **Rủi ro Dòng tiền và Nghĩa vụ Nợ khổng lồ (Overhang Debt Risk)**
-> - Tổng định giá doanh nghiệp (EV = Market Cap + Net Debt) thực chất bị thống trị bởi Nợ (D). Với đòn bẩy `Nợ/Vốn CSH` vẫn nằm trên lằn ranh 9.0x (thậm chí cao hơn trước đợt tăng vốn 2025), một tỷ lệ khổng lồ của EV thuộc về chủ nợ. Bất cứ cú sốc giảm EBITDA nào cũng sẽ lập tức cướp đi phần giá trị vốn hóa (Equity) của cổ đông, do nghĩa vụ trả nợ là cố định (fixed constraint).
+## 1. Tại sao P/E và P/B mất hiệu lực?
 
 > [!CAUTION]
-> **Rủi ro Pha loãng (Dilution Risk) - Cứu cánh hay Thuốc độc?**
-> - Việc phát hành gần 900 triệu cổ phiếu năm 2025 để đảo ngược tình trạng âm vốn chủ sở hữu, từ góc nhìn thanh khoản, là một mũi tiêm năng lượng giải cứu HVN khỏi rủi ro hủy niêm yết (delisting). 
-> - Tuy nhiên, hệ quả tất yếu là Pha loãng. Mẫu số (Số lượng cổ phiếu đang lưu hành) tăng vọt khiến EPS tương lai bị đè nén mạnh. Định giá P/E có thể trông rẻ đi nhờ bùng nổ nhu cầu vé máy bay sau mở cửa, nhưng khả năng tăng thị giá (Capital Gain) sẽ bị kiềm chế do cung cổ phiếu mới tràn ngập.
+> **Các chỉ số bị cách ly (Neutralized Metrics)**
+> - **P/B (Price-to-Book):** VCSH âm sâu từ 2022 đến 2024 khiến P/B mang giá trị âm — vô nghĩa về mặt toán học lẫn kinh tế. Năm 2025 dù BV dương trở lại, P/B vọt tới ~11.39x do mẫu số quá nhỏ.
+> - **P/E (Price-to-Earnings):** Lợi nhuận ròng có tính chu kỳ cực mạnh (âm sâu 2020-2023, vọt dương 2024-2025). P/E ~7-9x tạo **ảo giác cổ phiếu rẻ** mà bỏ qua rủi ro cấu trúc.
+> - **ROE:** Khi VCSH âm, ROE dương nghịch lý (chia số âm cho số âm), tạo **tín hiệu giả dương** cực kỳ nguy hiểm.
+>
+> → Hệ thống đã **tự động gán NaN** cho toàn bộ các chỉ số trên tại các năm bị ảnh hưởng.
 
-## 3. Tiểu kết
+## 2. Phương pháp Thay thế: EV/EBITDA Mean Reversion
 
-Ở mức EV/EBITDA từ 5.1x - 6.4x, cổ phiếu HVN đang được xem xét là **khá rẻ so với giá trị nội tại lịch sử và xu thế phục hồi**. Giai đoạn đen tối nhất (nhà đầu tư chứng kiến giá trị sổ sách âm) đã qua. 
+**EBITDA** (Lợi nhuận trước lãi vay, thuế và khấu hao) bóc tách các yếu tố cấu trúc vốn và chính sách kế toán, phản ánh khả năng tạo tiền cốt lõi từ hoạt động bay. **EV** (Enterprise Value = Vốn hóa + Nợ vay thuần) đo lường giá trị toàn bộ doanh nghiệp — bao gồm cả phần thuộc về chủ nợ.
 
-Tuy nhiên, đây là trường hợp đặc thù của định giá cơ hội (Turnaround Valuation), không dành cho khẩu vị rủi ro thấp. Toàn bộ kịch bản phục hồi của vốn hóa sẽ đứng vững trên sự bảo kê của dòng biên EBITDA vượt chi phí vốn và lộ trình giảm dần Nợ bằng nguồn tiền từ đợt phát hành mới trên cấu trúc tài sản bay.
+### Kết quả phân tích EV/EBITDA qua 12 năm:
+
+| Giai đoạn | EV/EBITDA | Nhận định |
+|---|---|---|
+| 2012 – 2019 (Ổn định) | 8x – 20x | Mức bình thường cho ngành hàng không truyền thống |
+| 2020 – 2023 (Khủng hoảng) | Âm / Bất thường | EBITDA âm làm bội số mất ý nghĩa |
+| 2024 – 2025 (Phục hồi) | **5.2x – 6.4x** | Rẻ hơn đáng kể so với trung bình lịch sử |
+
+Hệ thống sử dụng phương pháp **Mean Reversion** — giả định bội số sẽ hồi quy về giá trị trung bình (Mean) ± độ lệch chuẩn (σ) qua chuỗi 12 năm — để xác định dải định giá hợp lý.
+
+## 3. Mô hình DCF — Terminal Value Integration
+
+Thay vì áp dụng mô hình Gordon Growth cơ bản (V = FCFF/(WACC-g)) dễ gãy khi g ≈ WACC, hệ thống triển khai mô hình kết hợp:
+
+**Bước 1:** Dự phóng dòng tiền tự do (FCFF) trong 5 năm tới dựa trên tốc độ tăng trưởng EBITDA.
+
+**Bước 2:** Tính Terminal Value tại năm cuối:
+$$TV_n = EBITDA_n \times Mean(EV/EBITDA_{lịch sử})$$
+
+**Bước 3:** Chiết khấu toàn bộ các dòng FCFF và TV về hiện tại bằng WACC:
+$$EV = \sum_{t=1}^{5} \frac{FCFF_t}{(1+WACC)^t} + \frac{TV_5}{(1+WACC)^5}$$
+
+**Ưu điểm:** Giá trị doanh nghiệp vừa phản ánh khả năng tạo tiền nội tại, vừa phản ánh cách thị trường thường định giá HVN qua các chu kỳ.
+
+Ma trận độ nhạy WACC × EBITDA Growth trên Dashboard cho phép nhà phân tích stress-test hàng trăm kịch bản định giá đồng thời.
+
+## 4. Football Field Chart — Kết luận Dải Giá trị
+
+Hai phương pháp trên được tổng hợp vào biểu đồ **Football Field Chart** — chuẩn mực của báo cáo Equity Research:
+
+- **Thanh 1 (EV/EBITDA ±1σ):** Dải giá trị doanh nghiệp dựa trên chuẩn hóa bội số lịch sử.
+- **Thanh 2 (DCF TV Integration):** Dải giá trị từ ma trận chiết khấu dòng tiền.
+- **Đường neo (Current EV):** Enterprise Value thực tế hiện tại.
+
+> [!IMPORTANT]
+> **Quy tắc đọc Football Field:**
+> - Nếu EV hiện tại nằm **dưới** vùng giao thoa → Tín hiệu **Undervalued** (định giá thấp)
+> - Nếu EV hiện tại nằm **trên** vùng giao thoa → Tín hiệu **Overvalued** (định giá cao)
+> - Vùng giao thoa = vùng đồng thuận giá trị hợp lý (Fair Value Zone)
+
+## 5. Tiểu kết
+
+Ở mức EV/EBITDA 5.2x – 6.4x, cổ phiếu HVN đang được đánh giá là **khá rẻ so với giá trị nội tại lịch sử và xu hướng phục hồi**. Tuy nhiên, đây là trường hợp **Turnaround Valuation** — toàn bộ kịch bản phục hồi đứng trên giả định dòng biên EBITDA vượt chi phí vốn và lộ trình tái cấu trúc Nợ.
+
+Nhà đầu tư cần đồng thời tham chiếu **DSCR** (Chương 4) và **Liquidity Runway** để đánh giá liệu doanh nghiệp có đủ sức chịu đựng một cú sốc thanh khoản mới trước khi giá trị hội tụ về vùng Mean.

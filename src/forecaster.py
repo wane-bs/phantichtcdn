@@ -150,44 +150,40 @@ class Forecaster:
     # =========================================================================
     # Valuation Bands
     # =========================================================================
-    def valuation_bands(self, pe_series=None):
+    def valuation_bands(self, series_name=r'^EV/EBITDA$'):
         """
-        Tính dải định giá lịch sử dựa trên P/E hoặc P/B.
+        Tính dải định giá lịch sử dựa trên phân phối của EV/EBITDA.
         Band = mean ± 1σ, ±2σ
-        Band Position = (current - lower) / (upper - lower)
         """
         fi = self.dfs.get('FINANCIAL INDEX')
         if fi is None:
             return None
 
         years = self._get_years(fi)
-
-        if pe_series is None:
-            pe_row = self._get_row(fi, r'^P/E$')
-            if pe_row is None:
-                return None
-            pe_series = pe_row[years].astype(float)
-
-        pe_vals = pe_series.replace(0, np.nan).dropna()
-        if len(pe_vals) < 2:
+        row = self._get_row(fi, series_name)
+        if row is None:
+            return None
+            
+        series = row[years].astype(float)
+        vals = series.replace(0, np.nan).dropna()
+        if len(vals) < 2:
             return None
 
-        mean_pe = pe_vals.mean()
-        std_pe = pe_vals.std()
+        mean_val = vals.mean()
+        std_val = vals.std()
 
         bands = {
-            'original': pe_series,
-            'mean': mean_pe,
-            'upper_1s': mean_pe + std_pe,
-            'lower_1s': mean_pe - std_pe,
-            'upper_2s': mean_pe + 2 * std_pe,
-            'lower_2s': mean_pe - 2 * std_pe,
-            'years': list(pe_series.index),
+            'original': series,
+            'mean': mean_val,
+            'upper_1s': mean_val + std_val,
+            'lower_1s': mean_val - std_val,
+            'upper_2s': mean_val + 2 * std_val,
+            'lower_2s': mean_val - 2 * std_val,
+            'years': list(series.index),
         }
 
-        # Band Position = (current - lower_1s) / (upper_1s - lower_1s)
-        if std_pe != 0:
-            current = float(pe_series.iloc[-1])
+        if std_val != 0:
+            current = float(series.iloc[-1])
             bands['band_position'] = (current - bands['lower_1s']) / (bands['upper_1s'] - bands['lower_1s'])
         else:
             bands['band_position'] = 0.5
@@ -197,41 +193,69 @@ class Forecaster:
     # =========================================================================
     # DCF Sensitivity Heatmap
     # =========================================================================
-    def dcf_sensitivity(self, fcff_base=None, wacc_range=(0.08, 0.16, 0.005),
-                         g_range=(0.0, 0.06, 0.005)):
+    def dcf_sensitivity(self, fcff_base=None, ebitda_base=None, ev_ebitda_multiple=None,
+                        wacc_range=(0.08, 0.16, 0.005), ebitda_growth_range=(-0.02, 0.08, 0.005)):
         """
-        Ma trận WACC × g → Giá trị nội tại (Gordon Growth Model simplified).
-        
-        Công thức: V = FCFF / (WACC - g)
-        
-        wacc_range: (start, stop, step)
-        g_range: (start, stop, step)
+        Ma trận Terminal Value Integration DCF:
+        - Tích hợp dự phóng FCFF 5 năm và Terminal Value dựa trên EBITDA_n × Mean(EV/EBITDA).
         """
         is_df = self.dfs.get('INCOME STATEMENT')
         cf_df = self.dfs.get('CASH FLOW STATEMENT')
+        fi = self.dfs.get('FINANCIAL INDEX')
 
-        # Tính FCFF base nếu chưa có
         if fcff_base is None:
             if cf_df is not None:
                 ocf_row = self._get_row(cf_df, r'^Lưu chuyển tiền thuần từ các hoạt động sản xuất')
-                if ocf_row is not None:
+                capex_row = self._get_row(cf_df, r'^Tiền mua tài sản cố định')
+                if ocf_row is not None and capex_row is not None:
                     years = self._get_years(cf_df)
-                    fcff_base = float(ocf_row[years[-1]])  # dùng năm gần nhất
+                    fcff_base = float(ocf_row[years[-1]]) + float(capex_row[years[-1]])
                 else:
-                    fcff_base = 1000.0  # fallback (1000 tỷ)
+                    fcff_base = 1000.0
             else:
                 fcff_base = 1000.0
 
+        if ebitda_base is None:
+            if is_df is not None:
+                ebitda_row = self._get_row(is_df, r'^EBITDA$')
+                if ebitda_row is not None:
+                    years = self._get_years(is_df)
+                    ebitda_base = float(ebitda_row[years[-1]])
+                else:
+                    ebitda_base = 2000.0
+            else:
+                ebitda_base = 2000.0
+                
+        if ev_ebitda_multiple is None:
+            if fi is not None:
+                ev_ebitda_row = self._get_row(fi, r'^EV/EBITDA$')
+                if ev_ebitda_row is not None:
+                    years = self._get_years(fi)
+                    ev_ebitda_multiple = float(ev_ebitda_row[years].astype(float).mean())
+                    if pd.isna(ev_ebitda_multiple): ev_ebitda_multiple = 8.0
+                else:
+                    ev_ebitda_multiple = 8.0
+            else:
+                ev_ebitda_multiple = 8.0
+
         wacc_vals = np.arange(wacc_range[0], wacc_range[1] + wacc_range[2] / 2, wacc_range[2])
-        g_vals = np.arange(g_range[0], g_range[1] + g_range[2] / 2, g_range[2])
+        g_vals = np.arange(ebitda_growth_range[0], ebitda_growth_range[1] + ebitda_growth_range[2] / 2, ebitda_growth_range[2])
 
         matrix = np.zeros((len(wacc_vals), len(g_vals)))
+        n_years = 5
+        
         for i, wacc in enumerate(wacc_vals):
             for j, g in enumerate(g_vals):
-                if wacc > g:
-                    matrix[i, j] = round(fcff_base / (wacc - g), 1)
-                else:
-                    matrix[i, j] = np.nan
+                ev = 0
+                current_fcff = fcff_base
+                for t in range(1, n_years + 1):
+                    current_fcff *= (1 + g)
+                    ev += current_fcff / ((1 + wacc) ** t)
+                
+                ebitda_terminal = ebitda_base * ((1 + g) ** n_years)
+                tv = ebitda_terminal * ev_ebitda_multiple
+                ev += tv / ((1 + wacc) ** n_years)
+                matrix[i, j] = round(ev, 1)
 
         return {
             'matrix': matrix,
@@ -240,83 +264,69 @@ class Forecaster:
             'wacc_vals': wacc_vals,
             'g_vals': g_vals,
             'fcff_base': fcff_base,
+            'ebitda_base': ebitda_base,
+            'ev_ebitda_multiple': ev_ebitda_multiple
         }
 
     # =========================================================================
     # What-if ROE Simulator
     # =========================================================================
-    def what_if_roe(self, target_roe_delta=0.10):
+    def football_field_data(self, valuation_bands_res, dcf_matrix_res):
         """
-        Giữ 2 nhân tố DuPont, tính nhân tố thứ 3 cần thiết để ROE tăng target_roe_delta.
-        
-        target_roe_delta: float, ví dụ 0.10 = tăng 10%
-        
-        3 kịch bản:
-          1. Cải thiện ROS: AT_cần = ROE_mục_tiêu / (NM × EM)
-          2. Cải thiện AT:  ROS_cần = ROE_mục_tiêu / (AT × EM)
-          3. Cải thiện Lev: ...
+        Tổng hợp dải giá trị từ các phương pháp định giá:
+        1. EV/EBITDA History (1 std dev)
+        2. DCF Terminal Value Integration
+        3. Current Enterprise Value
         """
-        dupont = self.dfs.get('DUPONT')
-        if dupont is None:
-            return None
+        bs_df = self.dfs.get('BALANCE SHEET')
+        fi = self.dfs.get('FINANCIAL INDEX')
+        
+        current_ev = 0.0
+        if fi is not None and bs_df is not None:
+            years = self._get_years(bs_df)
+            latest = years[-1]
+            mc_row = self._get_row(fi, r'^Vốn hóa$')
+            nnh = self._get_row(bs_df, r'^Nợ ngắn hạn$')
+            ndh = self._get_row(bs_df, r'^Nợ dài hạn$')
+            cash = self._get_row(bs_df, r'^Tiền và tương đương tiền$')
+            if cash is None:
+                cash = pd.Series([0]*len(years), index=years)
+                c_row = self._get_row(bs_df, r'^Tiền và các khoản tương đương tiền$')
+                if c_row is not None:
+                    cash = c_row
 
-        years = self._get_years(dupont)
-        if not years:
-            return None
+            if mc_row is not None and nnh is not None and ndh is not None:
+                try:
+                    mc_val = float(mc_row[latest])
+                    debt_val = float(nnh[latest]) + float(ndh[latest])
+                    cash_val = float(cash[latest])
+                    net_debt = debt_val - cash_val
+                    current_ev = mc_val + net_debt
+                except:
+                    current_ev = 0.0
 
-        latest = years[-1]
-
-        ros_row = dupont[dupont['Khoản mục'].str.contains(r'^ROS', regex=True)]
-        at_row  = dupont[dupont['Khoản mục'].str.contains(r'^Asset Turnover', regex=True)]
-        lev_row = dupont[dupont['Khoản mục'].str.contains(r'^Financial Leverage', regex=True)]
-        roe_row = dupont[dupont['Khoản mục'].str.contains(r'^ROE', regex=True)]
-
-        if any(df.empty for df in [ros_row, at_row, lev_row, roe_row]):
-            return None
-
-        ros = float(ros_row.iloc[0][latest]) / 100
-        at  = float(at_row.iloc[0][latest])
-        lev = float(lev_row.iloc[0][latest])
-        roe_current = float(roe_row.iloc[0][latest]) / 100
-
-        roe_target = roe_current + target_roe_delta
-
-        def safe_div(num, den):
-            if abs(den) < 1e-9:
-                return None
-            return round(num / den, 4)
-
-        result = {
-            'roe_current_pct': round(roe_current * 100, 2),
-            'roe_target_pct': round(roe_target * 100, 2),
-            'delta_pct': round(target_roe_delta * 100, 2),
-            'current_ros': round(ros * 100, 2),
-            'current_at': round(at, 4),
-            'current_lev': round(lev, 4),
-            # Kịch bản 1: Cải thiện ROS, giữ AT và Lev
-            'scenario_ros': {
-                'name': 'Cải thiện ROS (giữ AT & Lev)',
-                'need_ros_pct': round(safe_div(roe_target, at * lev) * 100, 2) if safe_div(roe_target, at * lev) else None,
-                'fix_at': round(at, 4),
-                'fix_lev': round(lev, 4),
-            },
-            # Kịch bản 2: Cải thiện AT, giữ ROS và Lev
-            'scenario_at': {
-                'name': 'Cải thiện AT (giữ ROS & Lev)',
-                'need_at': safe_div(roe_target, ros * lev) if ros * lev != 0 else None,
-                'fix_ros_pct': round(ros * 100, 2),
-                'fix_lev': round(lev, 4),
-            },
-            # Kịch bản 3: Cải thiện Lev, giữ ROS và AT
-            'scenario_lev': {
-                'name': 'Điều chỉnh Đòn bẩy (giữ ROS & AT)',
-                'need_lev': safe_div(roe_target, ros * at) if ros * at != 0 else None,
-                'fix_ros_pct': round(ros * 100, 2),
-                'fix_at': round(at, 4),
-            },
-            'latest_year': latest,
+        ev_ebitda_min = 0.0
+        ev_ebitda_max = 0.0
+        if valuation_bands_res is not None and dcf_matrix_res is not None:
+            ebitda_base = dcf_matrix_res.get('ebitda_base', 0)
+            ev_ebitda_min = ebitda_base * valuation_bands_res.get('lower_1s', 0)
+            ev_ebitda_max = ebitda_base * valuation_bands_res.get('upper_1s', 0)
+        
+        dcf_min = 0.0
+        dcf_max = 0.0
+        if dcf_matrix_res is not None:
+            mat = dcf_matrix_res.get('matrix')
+            if mat is not None:
+                dcf_min = np.nanmin(mat)
+                dcf_max = np.nanmax(mat)
+                
+        return {
+            'current_ev': round(current_ev, 1),
+            'ev_ebitda_min': round(ev_ebitda_min, 1),
+            'ev_ebitda_max': round(ev_ebitda_max, 1),
+            'dcf_min': round(dcf_min, 1),
+            'dcf_max': round(dcf_max, 1)
         }
-        return result
 
     def save_outputs(self, results, out_dir="output/4_advanced"):
         import os
@@ -368,11 +378,10 @@ class Forecaster:
             with open(os.path.join(out_dir, "dcf_meta.json"), 'w') as f:
                 json.dump(meta, f)
 
-        if 'WHATIF_ROE' in results:
-            wi = results['WHATIF_ROE']
-            with open(os.path.join(out_dir, "whatif_roe.json"), 'w', encoding='utf-8') as f:
-                json.dump(wi, f, ensure_ascii=False, indent=4)
-                
+        if 'FOOTBALL_FIELD' in results:
+            ff = results['FOOTBALL_FIELD']
+            with open(os.path.join(out_dir, "football_field.json"), 'w', encoding='utf-8') as f:
+                json.dump(ff, f, ensure_ascii=False, indent=4)
         print(f"Forecaster outputs saved to {out_dir}")
 
     # =========================================================================
@@ -397,9 +406,9 @@ class Forecaster:
         if dcf:
             results['DCF_MATRIX'] = dcf
 
-        # What-if ROE
-        whatif = self.what_if_roe()
-        if whatif:
-            results['WHATIF_ROE'] = whatif
+        # Football Field Data
+        football = self.football_field_data(vb, dcf)
+        if football:
+            results['FOOTBALL_FIELD'] = football
 
         return results

@@ -148,6 +148,14 @@ def main():
         st.error(f"Error loading data: {e}")
         return
 
+    warnings_info = dfs.get('data_warnings', {})
+    if warnings_info.get('active'):
+        st.error(f"🚨 **CẢNH BÁO TÍN HIỆU GIẢ (DATA ANOMALY ALERT)**\n\n"
+                 f"- {warnings_info.get('equity_warning', '')}\n"
+                 f"- {warnings_info.get('ni_warning', '')}\n\n"
+                 "*(Khuyến nghị: Chuyển trọng tâm phân tích từ Định giá Cổ phiếu sang Dòng tiền & Thanh khoản)*")
+
+
     bs = dfs.get('BALANCE SHEET')
     is_df = dfs.get('INCOME STATEMENT')
     cf = dfs.get('CASH FLOW STATEMENT')
@@ -778,23 +786,25 @@ def main():
             st.warning(f"Không tìm thấy dữ liệu cho '{table_choice}'.")
 
     # ═══════════════════════════════════════════════════════════════════════
-    # TAB 5: DỰ BÁO & THANH KHOẢN
+    # TAB 5: ĐỊNH GIÁ DOANH NGHIỆP (Enterprise Value)
     # ═══════════════════════════════════════════════════════════════════════
     with tab5:
-        st.header("🤖 Phân tích Nâng cao — Thanh khoản & Dòng tiền")
+        st.header("📈 Định giá Doanh nghiệp — Enterprise Value Framework")
         st.markdown("""
 <div class="info-box">
-Triết lý: Phân tích <b>Cấu trúc Dòng Tiền</b> và đánh giá khả năng sinh tồn của doanh nghiệp dưới các <b>cú sốc thanh khoản</b>.
+Triết lý: Định giá theo <b>Giá trị Doanh nghiệp (EV)</b> thay vì Giá trị Vốn chủ sở hữu — phù hợp với doanh nghiệp có VCSH âm hoặc đang tái cấu trúc.
+Phương pháp: <b>EV/EBITDA Mean Reversion</b> + <b>DCF Terminal Value Integration</b> + <b>Football Field Chart</b>.
 </div>""", unsafe_allow_html=True)
 
         try:
-            f_results, forecaster_obj = load_forecaster_data(dfs)
+            forecaster_obj = Forecaster(dfs)
+            f_results = forecaster_obj.run_all()
         except Exception as e:
-            st.error(f"Lỗi khởi tạo module dự báo: {e}")
+            st.error(f"Lỗi khởi tạo module Forecaster: {e}")
             f_results = {}
             forecaster_obj = Forecaster(dfs)
 
-        # ---- 5.1 STL DECOMPOSITION ----
+        # ---- 5.1 STL DECOMPOSITION (giữ nguyên) ----
         st.subheader("1. Phân rã Chu kỳ STL (Trend / Seasonal / Residual)")
         stl_options = forecaster_obj.get_stl_series_options()
         sel_series = st.selectbox("Chọn chỉ số để phân rã:", stl_options, key='stl_select')
@@ -802,7 +812,7 @@ Triết lý: Phân tích <b>Cấu trúc Dòng Tiền</b> và đánh giá khả n
         stl_result = forecaster_obj.stl_decomposition(sel_series)
         if stl_result:
             method_tag = stl_result.get('method', '')
-            stl_years  = list(stl_result['original'].index)
+            stl_years = list(stl_result['original'].index)
 
             col_stl1, col_stl2, col_stl3 = st.columns(3)
             with col_stl1:
@@ -811,8 +821,7 @@ Triết lý: Phân tích <b>Cấu trúc Dòng Tiền</b> và đánh giá khả n
                     mode='lines+markers', name='Trend',
                     line=dict(color=COLORS['cyan'], width=2.5), marker=dict(size=8)
                 ))
-                fig_trend.update_layout(title=f'Xu hướng dài hạn ({method_tag})', **DARK_TEMPLATE,
-                                        height=260)
+                fig_trend.update_layout(title=f'Xu hướng dài hạn ({method_tag})', **DARK_TEMPLATE, height=260)
                 col_stl1.plotly_chart(fig_trend, use_container_width=True)
             with col_stl2:
                 fig_seas = go.Figure(go.Bar(
@@ -832,7 +841,7 @@ Triết lý: Phân tích <b>Cấu trúc Dòng Tiền</b> và đánh giá khả n
                 col_stl3.plotly_chart(fig_resid, use_container_width=True)
 
             st.markdown(
-                '<div class="info-box"><b>Đọc kết quả:</b> Residual lớn (±) = biến động bất thường không mang tính quy luật. '
+                '<div class="info-box"><b>Đọc kết quả:</b> Residual lớn (±) = biến động bất thường. '
                 'Seasonal ≈ 0 với dữ liệu năm là bình thường. Trend = năng lực lõi dài hạn.</div>',
                 unsafe_allow_html=True
             )
@@ -841,14 +850,14 @@ Triết lý: Phân tích <b>Cấu trúc Dòng Tiền</b> và đánh giá khả n
 
         st.divider()
 
-        # ---- 5.2 VALUATION BANDS ----
-        st.subheader("2. Dải Định giá Lịch sử (Valuation Bands P/E)")
+        # ---- 5.2 EV/EBITDA VALUATION BANDS ----
+        st.subheader("2. Dải Định giá Lịch sử (EV/EBITDA Mean Reversion)")
         vb = f_results.get('VALUATION_BANDS')
         if vb:
             vb_years = vb['years']
             fig_vb = go.Figure()
             fig_vb.add_trace(go.Scatter(x=vb_years, y=[vb['upper_2s']] * len(vb_years),
-                name='+2σ', line=dict(color='rgba(233,69,96,0.4)', dash='dot', width=1), mode='lines'))
+                name='+2σ (Đắt)', line=dict(color='rgba(233,69,96,0.4)', dash='dot', width=1), mode='lines'))
             fig_vb.add_trace(go.Scatter(x=vb_years, y=[vb['upper_1s']] * len(vb_years),
                 name='+1σ', line=dict(color='rgba(255,107,53,0.6)', dash='dot', width=1.5), mode='lines'))
             fig_vb.add_trace(go.Scatter(x=vb_years, y=[vb['mean']] * len(vb_years),
@@ -856,40 +865,46 @@ Triết lý: Phân tích <b>Cấu trúc Dòng Tiền</b> và đánh giá khả n
             fig_vb.add_trace(go.Scatter(x=vb_years, y=[vb['lower_1s']] * len(vb_years),
                 name='-1σ', line=dict(color='rgba(255,107,53,0.6)', dash='dot', width=1.5), mode='lines'))
             fig_vb.add_trace(go.Scatter(x=vb_years, y=[vb['lower_2s']] * len(vb_years),
-                name='-2σ', line=dict(color='rgba(233,69,96,0.4)', dash='dot', width=1), mode='lines'))
+                name='-2σ (Rẻ)', line=dict(color='rgba(233,69,96,0.4)', dash='dot', width=1), mode='lines'))
             fig_vb.add_trace(go.Scatter(x=vb_years, y=vb['original'].values,
-                name='P/E thực tế', mode='lines+markers',
+                name='EV/EBITDA thực tế', mode='lines+markers',
                 line=dict(color=COLORS['yellow'], width=2.5), marker=dict(size=10)))
             band_pos = vb.get('band_position', 0.5)
-            fig_vb.update_layout(title=f'P/E Valuation Bands  ·  Band Position hiện tại: {band_pos:.2f} (0=rẻ, 1=đắt)',
-                                 **DARK_TEMPLATE, yaxis_title='P/E (x)',
-                                 legend=dict(orientation='h', y=-0.15))
+            fig_vb.update_layout(
+                title=f'EV/EBITDA Valuation Bands  ·  Band Position: {band_pos:.2f} (0=rẻ, 1=đắt)',
+                **DARK_TEMPLATE, yaxis_title='EV/EBITDA (x)',
+                legend=dict(orientation='h', y=-0.15)
+            )
             st.plotly_chart(fig_vb, use_container_width=True)
+            st.markdown(
+                '<div class="info-box"><b>Ý nghĩa:</b> EV/EBITDA đo lường giá trị doanh nghiệp theo hiệu quả vận hành, '
+                'không bị ảnh hưởng bởi cấu trúc vốn. Band Position < 0.3 = vùng rẻ, > 0.7 = vùng đắt.</div>',
+                unsafe_allow_html=True
+            )
         else:
-            st.info("Không có dữ liệu P/E trong FINANCIAL INDEX để vẽ Valuation Bands.")
+            st.info("Không có dữ liệu EV/EBITDA trong FINANCIAL INDEX để vẽ Valuation Bands.")
 
         st.divider()
 
-        # ---- 5.3 DCF SENSITIVITY HEATMAP ----
-        st.subheader("🌡️ 3. Ma trận Độ nhạy DCF (WACC × g)")
+        # ---- 5.3 DCF TERMINAL VALUE INTEGRATION ----
+        st.subheader("🌡️ 3. Ma trận Định giá DCF (Terminal Value Integration)")
+        st.markdown(
+            '<div class="info-box"><b>Mô hình:</b> Dự phóng FCFF 5 năm + Terminal Value = EBITDA<sub>n</sub> × Mean(EV/EBITDA lịch sử). '
+            'Chiết khấu toàn bộ về hiện tại bằng WACC.</div>',
+            unsafe_allow_html=True
+        )
         col_dcf1, col_dcf2 = st.columns([1, 3])
         with col_dcf1:
             wacc_min = st.slider("WACC tối thiểu (%)", 6, 12, 8, step=1) / 100
             wacc_max = st.slider("WACC tối đa (%)", 12, 20, 16, step=1) / 100
-            g_min = st.slider("g tối thiểu (%)", 0, 3, 0, step=1) / 100
-            g_max = st.slider("g tối đa (%)", 3, 8, 6, step=1) / 100
-            st.markdown(f"""
-<div class="info-box">
-<b>OCF năm 2025</b> được dùng làm FCFF base.
-<b>V = FCFF / (WACC - g)</b><br>
-Gordon Growth Model đơn giản hóa.
-</div>""", unsafe_allow_html=True)
+            g_min = st.slider("EBITDA Growth tối thiểu (%)", -5, 3, -2, step=1) / 100
+            g_max = st.slider("EBITDA Growth tối đa (%)", 3, 15, 8, step=1) / 100
 
+        dcf_result = forecaster_obj.dcf_sensitivity(
+            wacc_range=(wacc_min, wacc_max, 0.005),
+            ebitda_growth_range=(g_min, g_max, 0.005)
+        )
         with col_dcf2:
-            dcf_result = forecaster_obj.dcf_sensitivity(
-                wacc_range=(wacc_min, wacc_max, 0.005),
-                g_range=(g_min, g_max, 0.005)
-            )
             if dcf_result and dcf_result['matrix'] is not None:
                 mat = dcf_result['matrix']
                 fig_dcf = go.Figure(go.Heatmap(
@@ -897,14 +912,15 @@ Gordon Growth Model đơn giản hóa.
                     x=dcf_result['g_labels'],
                     y=dcf_result['wacc_labels'],
                     colorscale='RdYlGn',
-                    text=[[f'{v:.0f}' if not np.isnan(v) else 'N/A' for v in row] for row in mat],
+                    text=[[f'{v/1e9:.0f}' if not np.isnan(v) else 'N/A' for v in row] for row in mat],
                     texttemplate='%{text}',
                     showscale=True,
-                    colorbar=dict(title='Giá trị (tỷ VND)')
+                    colorbar=dict(title='EV (tỷ VND)')
                 ))
+                ev_multiple = dcf_result.get('ev_ebitda_multiple', 0)
                 fig_dcf.update_layout(
-                    title=f'Giá trị nội tại (tỷ VND) · FCFF base = {dcf_result["fcff_base"]:.0f} tỷ',
-                    xaxis_title='Tăng trưởng dài hạn g',
+                    title=f'Enterprise Value (tỷ VND) · EV/EBITDA Mean = {ev_multiple:.1f}x',
+                    xaxis_title='Tăng trưởng EBITDA dài hạn',
                     yaxis_title='Chi phí vốn WACC',
                     **DARK_TEMPLATE
                 )
@@ -912,108 +928,55 @@ Gordon Growth Model đơn giản hóa.
 
         st.divider()
 
-        # ---- 5.4 WHAT-IF ROE SIMULATOR ----
-        st.subheader("🎯 4. What-if ROE Simulator")
-        col_wi1, col_wi2 = st.columns([1, 2])
-        with col_wi1:
-            roe_delta_pct = st.slider(
-                "ΔROE mục tiêu (% pts)", -30, 30, 10, step=1,
-                help="Dương = muốn ROE tăng thêm X%; Âm = chấp nhận ROE giảm X%"
+        # ---- 5.4 FOOTBALL FIELD CHART ----
+        st.subheader("⚽ 4. Football Field Chart — So sánh Dải Giá trị")
+        ff = f_results.get('FOOTBALL_FIELD')
+        if ff:
+            methods = ['EV/EBITDA (±1σ)', 'DCF TV Integration']
+            mins = [ff['ev_ebitda_min'] / 1e9, ff['dcf_min'] / 1e9]
+            maxs = [ff['ev_ebitda_max'] / 1e9, ff['dcf_max'] / 1e9]
+            current_ev_b = ff['current_ev'] / 1e9
+
+            fig_ff = go.Figure()
+            bar_colors = [COLORS['teal'], COLORS['purple']]
+            for i, method in enumerate(methods):
+                fig_ff.add_trace(go.Bar(
+                    y=[method], x=[maxs[i] - mins[i]],
+                    base=[mins[i]],
+                    orientation='h',
+                    name=method,
+                    marker_color=bar_colors[i],
+                    opacity=0.75,
+                    text=[f'{mins[i]:,.0f} – {maxs[i]:,.0f} tỷ'],
+                    textposition='inside',
+                    textfont=dict(size=13, color='white')
+                ))
+
+            fig_ff.add_vline(
+                x=current_ev_b, line_dash='dash', line_color=COLORS['yellow'], line_width=2.5,
+                annotation_text=f'EV hiện tại: {current_ev_b:,.0f} tỷ',
+                annotation_position='top right',
+                annotation_font=dict(color=COLORS['yellow'], size=14)
             )
-            roe_delta = roe_delta_pct / 100
 
-        with col_wi2:
-            wi_result = forecaster_obj.what_if_roe(target_roe_delta=roe_delta)
-            if wi_result:
-                st.markdown(f"""
-<div class="info-box">
-<b>ROE hiện tại ({wi_result['latest_year']}):</b> {wi_result['roe_current_pct']:.2f}% →
-<b>ROE mục tiêu:</b> {wi_result['roe_target_pct']:.2f}% (Δ = {wi_result['delta_pct']:+.1f}%pts)
-</div>""", unsafe_allow_html=True)
-
-                wc1, wc2, wc3 = st.columns(3)
-                def _fmt_val(val, unit='', precision=2):
-                    if val is None:
-                        return 'N/A (mẫu số ≈ 0)'
-                    return f'{val:.{precision}f}{unit}'
-
-                with wc1:
-                    need_ros = wi_result['scenario_ros'].get('need_ros_pct')
-                    st.metric("Kịch bản 1: Cải thiện ROS",
-                              _fmt_val(need_ros, '%'),
-                              delta=f"{(need_ros - wi_result['current_ros']):.1f}%pts" if need_ros else None)
-                    st.caption(f"Giữ AT={wi_result['current_at']:.2f}x, Lev={wi_result['current_lev']:.2f}x")
-
-                with wc2:
-                    need_at = wi_result['scenario_at'].get('need_at')
-                    st.metric("Kịch bản 2: Cải thiện AT",
-                              _fmt_val(need_at, 'x', 3),
-                              delta=f"{(need_at - wi_result['current_at']):.3f}x" if need_at else None)
-                    st.caption(f"Giữ ROS={wi_result['current_ros']:.2f}%, Lev={wi_result['current_lev']:.2f}x")
-
-                with wc3:
-                    need_lev = wi_result['scenario_lev'].get('need_lev')
-                    st.metric("Kịch bản 3: Điều chỉnh Lev",
-                              _fmt_val(need_lev, 'x', 2),
-                              delta=f"{(need_lev - wi_result['current_lev']):.2f}x" if need_lev else None)
-                    st.caption(f"Giữ ROS={wi_result['current_ros']:.2f}%, AT={wi_result['current_at']:.2f}x")
-            else:
-                st.warning("Không đủ dữ liệu DuPont để mô phỏng What-if ROE.")
-
-        # ---- 5.5 LIQUIDITY & GROSS DEBT ----
-        st.divider()
-        st.subheader("💧 5. Phân tích Dòng tiền & Cấu trúc Nợ gộp")
-        lcf_df = dfs.get('LIQUIDITY_CASHFLOW')
-        if lcf_df is not None:
-            lcf_years = [c for c in lcf_df.columns if c != 'Khoản mục']
-            
-            c_l1, c_l2 = st.columns(2)
-            with c_l1:
-                # Flow Metrics
-                fcff = get_row_data(lcf_df, r'^FCFF')
-                fcfe = get_row_data(lcf_df, r'^FCFE')
-                if fcff is not None and fcfe is not None:
-                    fig_fc = plot_line_multi({'FCFF': fcff, 'FCFE': fcfe}, "Dòng tiền Tự do (FCFF vs FCFE)", lcf_years, 'tỷ VND')
-                    st.plotly_chart(fig_fc, use_container_width=True)
-            
-            with c_l2:
-                # Debt Metrics
-                cfo_gd = get_row_data(lcf_df, r'^CFO / Gross Debt')
-                gd_ebitda = get_row_data(lcf_df, r'^Gross Debt / EBITDA')
-                if cfo_gd is not None and gd_ebitda is not None:
-                    fig_gd = make_subplots(specs=[[{"secondary_y": True}]])
-                    fig_gd.add_trace(go.Bar(x=lcf_years, y=cfo_gd, name='CFO/Gross Debt (%)', marker_color=COLORS['teal']), secondary_y=False)
-                    fig_gd.add_trace(go.Scatter(x=lcf_years, y=gd_ebitda, name='Gross Debt/EBITDA (x)', mode='lines+markers', line=dict(color=COLORS['orange'])), secondary_y=True)
-                    fig_gd.update_layout(title="Khả năng trả nợ lõi", **DARK_TEMPLATE)
-                    st.plotly_chart(fig_gd, use_container_width=True)
-            
-            st.divider()
-            
-            st.subheader("🔥 6. Khung Kiểm tra Sức chịu đựng Thanh khoản Động (Stress-Test)")
-            st.markdown('<div class="info-box">Giả lập kịch bản Sốc: <b>CFO giảm 30%, Lãi vay tăng 20%</b>. Đánh giá Runway (số tháng sinh tồn nếu đứt gãy dòng tiền).</div>', unsafe_allow_html=True)
-            
-            c_s1, c_s2 = st.columns(2)
-            with c_s1:
-                dscr = get_row_data(lcf_df, r'^DSCR \(Khả năng')
-                stressed_dscr = get_row_data(lcf_df, r'^STRESS DSCR')
-                if dscr is not None and stressed_dscr is not None:
-                    fig_dscr = go.Figure()
-                    fig_dscr.add_trace(go.Scatter(x=lcf_years, y=dscr, name='DSCR (Bình thường)', mode='lines+markers', line=dict(color=COLORS['green'])))
-                    fig_dscr.add_trace(go.Scatter(x=lcf_years, y=stressed_dscr, name='DSCR (Sốc 30%)', mode='lines+markers', line=dict(color=COLORS['red'], dash='dot')))
-                    fig_dscr.add_hline(y=1.0, line_dash='dash', line_color='white', annotation_text='DSCR = 1 (Ranh giới)')
-                    fig_dscr.update_layout(title='Chỉ số Bao phủ Nợ (DSCR)', **DARK_TEMPLATE)
-                    st.plotly_chart(fig_dscr, use_container_width=True)
-                    
-            with c_s2:
-                runway = get_row_data(lcf_df, r'^Liquidity Runway')
-                if runway is not None:
-                    fig_rw = go.Figure(go.Bar(x=lcf_years, y=runway, marker_color=COLORS['cyan'], text=[f"{v:.1f}T" if pd.notna(v) else "N/A" for v in runway], textposition='outside'))
-                    fig_rw.add_hline(y=12, line_dash='dash', line_color=COLORS['yellow'], annotation_text='1 Năm sinh tồn')
-                    fig_rw.update_layout(title='Liquidity Runway (Tháng sinh tồn tối đa)', **DARK_TEMPLATE)
-                    st.plotly_chart(fig_rw, use_container_width=True)
+            fig_ff.update_layout(
+                title='So sánh Dải Giá trị Doanh nghiệp (Enterprise Value)',
+                xaxis_title='Enterprise Value (tỷ VND)',
+                barmode='overlay',
+                **DARK_TEMPLATE,
+                height=300,
+                showlegend=True,
+                legend=dict(orientation='h', y=-0.25)
+            )
+            st.plotly_chart(fig_ff, use_container_width=True)
+            st.markdown(
+                '<div class="info-box"><b>Kết luận:</b> Nếu EV hiện tại nằm <b>dưới</b> vùng giao thoa của cả hai dải giá trị → '
+                'Tín hiệu <b>Undervalued</b>. Nếu nằm <b>trên</b> vùng giao thoa → Tín hiệu <b>Overvalued</b>.</div>',
+                unsafe_allow_html=True
+            )
         else:
-            st.info("Chưa có dữ liệu LIQUIDITY_CASHFLOW. Hãy chạy lại Pipeline.")
-
+            st.info("Chưa có dữ liệu để vẽ Football Field Chart. Hãy chạy Pipeline trước.")
+        
 
     # ═══════════════════════════════════════════════════════════════════════
     # TAB 7: BÁO CÁO TỔNG HỢP
