@@ -334,24 +334,58 @@ class Calculator:
         years = self._get_years(bs_df)
         new_rows = []
 
+        # Thử lấy nợ vay từ các khoản mục cụ thể nếu không có dòng "Nợ vay có lãi (Back-calculated)"
         debt_row = self._get_row(fi_df, r'^Nợ vay có lãi')
+        if debt_row is None:
+            # Fallback: Tổng Vay ngắn hạn + Vay dài hạn từ BS
+            vnh = self._get_row(bs_df, r'^Vay ngắn hạn')
+            vdh = self._get_row(bs_df, r'^Vay dài hạn')
+            if vnh is not None and vdh is not None:
+                debt_vals = vnh[years].astype(float) + vdh[years].astype(float)
+                # Thêm vào new_rows để lưu lại
+                new_rows.append({'Khoản mục': 'Nợ vay có lãi', **debt_vals.to_dict()})
+            else:
+                debt_vals = None
+        else:
+            debt_vals = debt_row[years].astype(float)
+
         cash_row = self._get_row(bs_df, r'^Tiền và tương đương tiền')
         ebitda_row = self._get_row(is_df, r'^EBITDA$')
+        rev_row = self._get_row(is_df, r'^Doanh số thuần$')
+        cap_row = self._get_row(fi_df, r'^Vốn hóa$|Market Cap')
 
-        if debt_row is not None and cash_row is not None and ebitda_row is not None:
-            net_debt = debt_row[years].astype(float) - cash_row[years].astype(float)
+        if debt_vals is not None and cash_row is not None:
+            net_debt = debt_vals - cash_row[years].astype(float)
             row_nd = {'Khoản mục': 'Net Debt (Nợ ròng)'}
             row_nd.update(net_debt.to_dict())
             new_rows.append(row_nd)
 
-            ebitda_vals = ebitda_row[years].astype(float).replace(0, np.nan)
-            ratio = net_debt / ebitda_vals
-            row_r = {'Khoản mục': 'Net Debt / EBITDA'}
-            row_r.update(ratio.fillna(0).to_dict())
-            new_rows.append(row_r)
+            if ebitda_row is not None:
+                ebitda_vals = ebitda_row[years].astype(float).replace(0, np.nan)
+                ratio = net_debt / ebitda_vals
+                row_r = {'Khoản mục': 'Net Debt / EBITDA'}
+                row_r.update(ratio.fillna(0).to_dict())
+                new_rows.append(row_r)
+            
+            if cap_row is not None:
+                cap = cap_row[years].astype(float)
+                ev = cap + net_debt
+                row_ev = {'Khoản mục': 'EV (Enterprise Value)'}
+                row_ev.update(ev.to_dict())
+                new_rows.append(row_ev)
+                
+                if rev_row is not None:
+                    rev = rev_row[years].astype(float).replace(0, np.nan)
+                    ev_rev = ev / rev
+                    row_ev_rev = {'Khoản mục': 'EV/Revenue'}
+                    row_ev_rev.update(ev_rev.to_dict())
+                    new_rows.append(row_ev_rev)
 
         if new_rows:
             new_df = pd.DataFrame(new_rows)
+            # Tránh trùng lặp nếu đã có các chỉ số này
+            existing_items = new_df['Khoản mục'].tolist()
+            fi_df = fi_df[~fi_df['Khoản mục'].isin(existing_items)]
             self.dfs['FINANCIAL INDEX'] = pd.concat([fi_df, new_df], ignore_index=True)
 
     # =========================================================================

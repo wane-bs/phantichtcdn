@@ -1,31 +1,8 @@
-1. Mô hình Chiết khấu dòng tiền doanh nghiệp (FCFF - Free Cash Flow to the Firm)
-Đây là phương pháp ưu tiên hàng đầu vì nó định giá toàn bộ thực thể kinh doanh (Enterprise Value - EV), tách biệt hoàn toàn với biến động của VCSH.
-- Cơ sở khoa học: Tập trung vào dòng tiền được tạo ra cho cả chủ nợ và chủ sở hữu.
-- Công thức:
-  EV = Σ [ FCFF_t / (1 + WACC)^t ] + [ TV / (1 + WACC)^n ]
-  VCSH = EV - Nợ vay thuần (Net Debt)
-- Lợi ích đối với dữ liệu 12 năm: FCFF sử dụng EBIT và khấu hao, vốn thường vẫn dương hoặc ổn định hơn lợi nhuận ròng ngay cả khi VCSH âm. Bạn có thể sử dụng Python để hồi quy chuỗi thời gian cho doanh thu, từ đó dự phóng FCFF một cách khách quan.
 
-2. Mô hình Định giá theo EV/EBITDA (Time-series Mean Reversion)
-Thay vì so sánh với các công ty khác, bạn thực hiện so sánh doanh nghiệp với chính nó trong quá khứ thông qua bội số EV/EBITDA.
-- Cơ sở khoa học: EBITDA là thước đo hiệu quả vận hành chưa tính đến cấu trúc vốn và thuế. EV (Giá trị doanh nghiệp) bao quát cả phần nợ vay lớn (nguyên nhân gây vốn âm).
-- Phương pháp thực hiện: Tính toán EV/EBITDA cho từng kỳ trong 12 năm.
-- Phương pháp Chuẩn hóa (Normalization): Xác định giá trị trung bình (Mean) và độ lệch chuẩn (σ) của bội số này qua các chu kỳ. Định giá dựa trên kỳ vọng bội số sẽ quay về mức trung bình lịch sử (Mean Reversion).
-- Ưu điểm: Loại bỏ tác động tiêu cực của các con số kế toán dưới đáy bảng cân đối kế toán.
+m&a với vài hãng air line. chia cắt thị phần với 1 vài hãng bay mới
+biến động kinh tế thực trong chuỗi 2011 - 2025
 
-3. Phương pháp Tích hợp Biến số (Terminal Value Integration)
-Đây là cách phối hợp trực tiếp nhất về mặt toán học. Thay vì sử dụng mô hình tăng trưởng vĩnh viễn (g), bạn sử dụng bội số EV/EBITDA lịch sử để xác định Giá trị cuối kỳ (Terminal Value - TV) trong mô hình FCFF.
-- Cơ chế:
-  1. Dự phóng FCFF trong 5-10 năm.
-  2. Tại năm cuối (n), tính toán EBITDA dự phóng.
-  3. TV_n = EBITDA_n * (EV/EBITDA trung bình 12 năm).
-  4. Chiết khấu TV_n và các dòng FCFF về hiện tại bằng WACC.
-- Hàm ý: Giá trị doanh nghiệp lúc này vừa phản ánh khả năng tạo tiền (nội tại), vừa phản ánh cách thị trường thường định giá doanh nghiệp đó qua các chu kỳ (lịch sử).
+lý giải giai đoạn 2020 - 2024 tỷ trọng tài sản cố định giảm từ 70% xuống 30% do Tổng số tàu bay cũ có thể được đưa vào diện tái cấu trúc trong giai đoạn 2021-2025 lên tới 26 tàu bay A321. Nghiệp vụ "Sale and Leaseback" giúp HVN chuyển đổi tài sản sở hữu thành tài sản thuê ngoài, đẩy TSCĐ ra khỏi bảng cân đối kế toán và ghi nhận chi phí thuê vào chi phí hoạt động (Opex).  Trong giai đoạn 2020-2024, do HVN hạn chế tối đa các khoản chi tiêu vốn (Capex) mua mới tài sản để bảo toàn thanh khoản, giá trị còn lại của TSCĐ liên tục bị bào mòn bởi chi phí khấu hao qua các năm
 
-4. Biểu đồ "Football Field Chart" (Khung so sánh dải giá trị)
-Đây là tiêu chuẩn trong các báo cáo phân tích Equity Research hoặc Investor Relations (IR) để đưa ra kết luận về vùng giá mục tiêu.
-- Cấu trúc biểu đồ: Trục tung hiển thị các phương pháp định giá, trục hoành hiển thị giá trị doanh nghiệp (EV) hoặc giá cổ phiếu.
-- Cách hiển thị:
-  - Dòng FCFF: Hiển thị một dải giá trị (Range) dựa trên phân tích độ nhạy (Sensitivity Analysis) của WACC và g.
-  - Dòng EV/EBITDA: Hiển thị dải giá trị dựa trên [Mean - 1σ] và [Mean + 1σ] của chuỗi 12 năm.
-- Kết luận: Nếu giá thị trường hiện tại nằm dưới vùng giao thoa (Overlap) của cả hai dải giá trị, đó là tín hiệu mua mạnh (Strong Buy).
+lý giải sự phát triển của tài sản ngắn hạn: Dòng tiền đột biến từ Huy động Vốn cổ phần (Equity Financing): Sự kiện mang tính bước ngoặt là HVN đã hoàn tất đợt phát hành 900 triệu cổ phiếu vào tháng 9/2025, thu về dòng tiền khổng lồ lên tới 8.971 tỷ VND. Tính đến thời điểm báo cáo, số tiền chưa sử dụng từ đợt phát hành này vẫn còn tới 6.727 tỷ VND. Nguồn vốn này nằm trực tiếp dưới dạng tiền, tương đương tiền và đầu tư tài chính ngắn hạn. Điều này được minh chứng rõ qua tốc độ tăng trưởng (YoY) năm 2025 của khoản mục Tiền & Tương đương tiền đạt 113,65% và Đầu tư ngắn hạn tăng phi mã 694,47%. Chất lượng Dòng tiền Hoạt động (CFO) thặng dư: Sự phục hồi mạnh mẽ của hoạt động kinh doanh cốt lõi (vượt qua điểm hòa vốn) đã tạo ra dòng tiền thuần từ hoạt động kinh doanh (CFO) đạt mức 12.272 tỷ VND trong năm 2025
+. Cùng với sự phục hồi của quy mô doanh thu, các khoản phải thu ngắn hạn từ khách hàng cũng gia tăng tương ứng, đóng góp vào sự phình to của tổng tài sản ngắn hạn

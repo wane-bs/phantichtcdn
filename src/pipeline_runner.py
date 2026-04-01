@@ -1,5 +1,13 @@
 import time
 import sys
+import os
+
+# Tự động xác định Project Root (thư mục 'hvn') để các đường dẫn tương đối hoạt động đúng
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(PROJECT_ROOT)
+
+# Thêm thư mục src vào sys.path để đảm bảo các module local được import đúng
+sys.path.append(os.path.join(PROJECT_ROOT, "src"))
 
 def run_pipeline():
     print("=" * 40)

@@ -283,6 +283,27 @@ def main():
         )
         st.plotly_chart(fig_asset, use_container_width=True)
 
+        # ── Biến động Tài sản qua các năm (Line Chart) ──
+        st.subheader("Biến động Tài sản qua các năm (tỷ VND)")
+        curr_assets = get_row_data(bs, r'^TÀI SẢN NGẮN HẠN$')
+        total_assets = get_row_data(bs, r'^TỔNG TÀI SẢN$')
+        fixed_assets = get_row_data(bs, f'^Tài sản cố định')
+        
+        if curr_assets is not None and total_assets is not None and fixed_assets is not None:
+            # Scale to tỷ VND (÷ 1e9)
+            SCALE_T = 1e9
+            fig_trend = plot_line_multi({
+                'Tài sản ngắn hạn': curr_assets / SCALE_T,
+                'Tổng tài sản': total_assets / SCALE_T,
+                'Tài sản cố định': fixed_assets / SCALE_T
+            }, "Xu hướng biến động Tài sản (tỷ VND)", years, 'tỷ VND')
+            
+            fig_trend.update_layout(
+                hovermode='x unified',
+                legend=dict(orientation='h', y=-0.2)
+            )
+            st.plotly_chart(fig_trend, use_container_width=True)
+
         # Net Debt / EBITDA
         nd_ebitda = get_fi_row(fi, r'^Net Debt / EBITDA$')
         if nd_ebitda is not None:
@@ -649,9 +670,22 @@ def main():
             st.plotly_chart(fig_val, use_container_width=True)
         with c2:
             ev_ebitda = get_fi_row(fi, r'^EV/EBITDA$')
+            ev_rev = get_fi_row(fi, r'^EV/Revenue$')
             p_cf = get_fi_row(fi, r'^P/Cash Flow$|^P/CF$')
-            fig_val2 = plot_line_multi({'EV/EBITDA': ev_ebitda, 'P/Cash Flow': p_cf},
-                                       "EV/EBITDA & P/CF", years, 'x')
+            fig_val2 = plot_line_multi({
+                'EV/EBITDA': ev_ebitda, 
+                'EV/Revenue': ev_rev,
+                'P/Cash Flow': p_cf
+            }, "EV/EBITDA, EV/Revenue & P/CF", years, 'x')
+            
+            # Thêm vùng ngưỡng trung bình
+            fig_val2.add_hrect(y0=5.0, y1=7.5, fillcolor="rgba(255,107,53,0.1)", line_width=0, 
+                               annotation_text="EV/EBITDA Zone (5.0x-7.5x)", annotation_position="top left",
+                               annotation_font=dict(size=10, color="#ff6b35"))
+            fig_val2.add_hrect(y0=0.9, y1=1.4, fillcolor="rgba(43,147,72,0.1)", line_width=0,
+                               annotation_text="EV/Revenue Zone (0.9x-1.4x)", annotation_position="bottom left",
+                               annotation_font=dict(size=10, color="#2b9348"))
+                               
             st.plotly_chart(fig_val2, use_container_width=True)
 
         # --- 3.2 Profitability + DuPont (CLUSTERED BAR) ---
@@ -1159,6 +1193,148 @@ Phương pháp: <b>EV/EBITDA Mean Reversion</b> + <b>DCF Terminal Value Integrat
                     **DARK_TEMPLATE
                 )
                 st.plotly_chart(fig_dcf, use_container_width=True)
+
+        st.divider()
+
+        # ---- 5.3b STRUCTURAL SENSITIVITY (OIL & FX) ----
+        st.subheader("🌡️ 3b. Ma trận Nhạy cảm Cấu trúc (Oil Price & FX Rate)")
+        st.markdown(
+            '<div class="info-box"><b>Mô hình:</b> Phân tích độ nhạy của định giá (EV/EBITDA) và Lợi nhuận ròng (Net Profit) '
+            'dựa trên biến động chi phí nhiên liệu (Oil) và tỷ giá (FX). '
+            'Mô hình tính toán tác động trực tiếp từ chi phí vận hành và đánh giá lại chênh lệch tỷ giá nợ vay USD.</div>',
+            unsafe_allow_html=True
+        )
+        
+        col_str1, col_str2 = st.columns([1, 3])
+        with col_str1:
+            # Sliders for parameters
+            st.write("### 🛠️ Tham số đầu vào")
+            s_base_oil = st.number_input("Giá dầu Jet A1 nền ($/thùng)", value=90.0, step=1.0, help="Giá dầu tham chiếu để tính biến động")
+            s_base_fx = st.number_input("Tỷ giá USD/VND nền", value=25000.0, step=100.0, help="Tỷ giá tham chiếu để tính biến động")
+            s_fuel_ratio = st.slider("Tỷ trọng Nhiên liệu/Opex (%)", 20, 60, 38) / 100
+            s_debt_ratio = st.slider("Tỷ lệ Nợ USD/Tổng nợ (%)", 50, 100, 80) / 100
+            
+            st.divider()
+            sensitivity_mode = st.radio("Chọn chỉ số hiển thị trên Ma trận:", ["Định giá (EV/EBITDA)", "Lợi nhuận ròng (Net Profit)"], index=0)
+            
+            st.caption("Cấu hình dải chạy Ma trận:")
+            o_min, o_max = st.slider("Dải giá Dầu ($)", 50, 150, (70, 110))
+            f_min, f_max = st.slider("Dải tỷ giá (VND)", 23000, 27000, (24500, 26000), step=100)
+
+        struct_result = forecaster_obj.structural_sensitivity(
+            base_oil=s_base_oil, base_fx=s_base_fx,
+            fuel_opex_ratio=s_fuel_ratio, usd_debt_ratio=s_debt_ratio,
+            oil_range=(o_min, o_max, 5), fx_range=(f_min, f_max, 100)
+        )
+        
+        with col_str2:
+            if struct_result:
+                # --- LIVE IMPACT INDICATORS ---
+                st.write("### 🔦 Cảnh báo & Tác động tức thời (Live Scenario Impact)")
+                base = struct_result['base_data']
+                
+                # Calculate "Live Impact" based on slider's current single view vs a hypothetical small shift
+                # or just use the current base as context.
+                # Actually, let's create a "Current Scenario" summary based on slider values
+                debt_in_usd = base['debt'] * s_debt_ratio / s_base_fx
+                
+                # Visual Alert for FX Revaluation
+                fx_shift_pct = (s_base_fx / 24500.0 - 1) * 100 # Change from a fixed 'stable' rate if desired
+                # Let's use user inputs as the 'target' and show impact if those were true
+                
+                c_m1, c_m2, c_m3 = st.columns(3)
+                
+                # We can calculate an 'estimated loss/gain' if FX moves +1% from current s_base_fx
+                fx_1pct_loss = (base['debt'] * s_debt_ratio) * 0.01 / 1e9
+                fuel_10d_loss = (base['fuel_cost'] * (10 / s_base_oil)) / 1e9
+                
+                c_m1.metric("Độ nhạy Tỷ giá", f"±1% USD/VND", f"{fx_1pct_loss:+.0f} tỷ VND", delta_color="inverse")
+                c_m2.metric("Độ nhạy Giá dầu", f"±$10 Jet A1", f"{fuel_10d_loss:+.0f} tỷ VND", delta_color="inverse")
+                
+                # Logic cho "Cảnh báo tự động lãi/lỗ"
+                # Giả định nếu s_base_fx thay đổi 1% so với mốc lịch sử ~24,500
+                historical_fx = 24500
+                total_fx_impact = (base['debt'] * s_debt_ratio) * (s_base_fx / historical_fx - 1) / 1e9
+                c_m3.metric("Ước tính Lỗ tỷ giá lũy kế", f"vs mốc {historical_fx}", f"{total_fx_impact:,.0f} tỷ", delta_color="inverse")
+
+                # --- THE HEATMAP ---
+                if sensitivity_mode == "Định giá (EV/EBITDA)":
+                    mat_s = struct_result['matrix']
+                    title_s = 'Định giá EV/EBITDA theo kịch bản Chi phí & Tỷ giá'
+                    z_label = 'EV/EBITDA (x)'
+                    colorscale = 'RdYlGn_r'
+                    text_vals = [[f'{v:.1f}x' if not np.isnan(v) else 'N/A' for v in row] for row in mat_s]
+                else:
+                    mat_s = struct_result['ni_matrix'] / 1e9 # Scale to tỷ VND
+                    title_s = 'Lợi nhuận ròng (Ước tính tỷ VND) theo biến động vĩ mô'
+                    z_label = 'NI (tỷ VND)'
+                    colorscale = 'RdYlGn'
+                    text_vals = [[f'{v:+.0f}t' if not np.isnan(v) else 'N/A' for v in row] for row in mat_s]
+
+                fig_struct = go.Figure(go.Heatmap(
+                    z=mat_s,
+                    x=struct_result['oil_labels'],
+                    y=struct_result['fx_labels'],
+                    colorscale=colorscale,
+                    text=text_vals,
+                    texttemplate='%{text}',
+                    showscale=True,
+                    colorbar=dict(title=z_label)
+                ))
+                fig_struct.update_layout(
+                    title=title_s,
+                    xaxis_title='Giá dầu Jet A1 ($/thùng)',
+                    yaxis_title='Tỷ giá USD/VND',
+                    **DARK_TEMPLATE, height=550
+                )
+                st.plotly_chart(fig_struct, use_container_width=True)
+                
+                if sensitivity_mode == "Lợi nhuận ròng (Net Profit)":
+                    st.warning("⚠️ **Lưu ý:** Lợi nhuận ròng bao gồm tác động từ chi phí nhiên liệu và đánh giá lại chênh lệch tỷ giá nợ vay. "
+                               "HVN cực kỳ nhạy cảm với tỷ giá do dư nợ USD lớn.")
+
+        st.divider()
+
+        # ---- 5.3c SCENARIO ANALYSIS (LINE CHART) ----
+        st.subheader("📈 3c. Kịch bản Định giá Phân kỳ (Scenario Analysis)")
+        
+        scenario_data = forecaster_obj.scenario_analysis()
+        if scenario_data:
+            col_sc1, col_sc2 = st.columns([1, 2])
+            with col_sc1:
+                st.markdown(f"""
+                **Kịch bản Cơ sở (Base):**
+                - Giá dầu Jet Fuel $85-90, tỷ giá ổn định.
+                - Tăng trưởng EBITDA ổn định (~7%).
+                - Định giá hội tụ về giá trị thực ({scenario_data['base'][-1]:.1f}x).
+                
+                **Kịch bản Tiêu cực (Negative):**
+                - Giá dầu tăng >15% hoặc VND mất giá mạnh.
+                - EBITDA sụt giảm mạnh trong năm đầu.
+                - Đẩy EV/EBITDA lên mức đắt đỏ ({scenario_data['negative'][-1]:.1f}x).
+                
+                **Kịch bản Tích cực (Positive):**
+                - Hạ tầng Long Thành (2026) & Trung Quốc phục hồi.
+                - Yield Management tối ưu, dòng tiền bùng nổ.
+                - EV/EBITDA giảm mạnh nhờ hiệu quả vận hành ({scenario_data['positive'][-1]:.1f}x).
+                """)
+                
+            with col_sc2:
+                fig_sc = go.Figure()
+                fig_sc.add_trace(go.Scatter(x=scenario_data['years'], y=scenario_data['base'], 
+                                            name='Cơ sở', line=dict(color=COLORS['cyan'], width=3)))
+                fig_sc.add_trace(go.Scatter(x=scenario_data['years'], y=scenario_data['negative'], 
+                                            name='Tiêu cực', line=dict(color=COLORS['red'], width=3, dash='dot')))
+                fig_sc.add_trace(go.Scatter(x=scenario_data['years'], y=scenario_data['positive'], 
+                                            name='Tích cực', line=dict(color=COLORS['green'], width=4)))
+                
+                fig_sc.update_layout(
+                    title='Dự phóng EV/EBITDA theo các kịch bản (2023-2028)',
+                    xaxis_title='Năm', yaxis_title='EV/EBITDA (x)',
+                    **DARK_TEMPLATE,
+                    legend=dict(orientation='h', y=-0.2)
+                )
+                st.plotly_chart(fig_sc, use_container_width=True)
 
         st.divider()
 

@@ -269,6 +269,210 @@ class Forecaster:
         }
 
     # =========================================================================
+    # Structural Sensitivity (Oil & FX)
+    # =========================================================================
+    def structural_sensitivity(self, base_oil=90.0, base_fx=25000.0, 
+                               fuel_opex_ratio=0.375, usd_debt_ratio=0.8,
+                               oil_range=(70, 110, 5), fx_range=(24500, 26000, 100)):
+        """
+        Ma trận nhạy cảm dựa trên cấu trúc chi phí và nợ:
+        - Biến 1: Giá dầu Jet A1
+        - Biến 2: Tỷ giá USD/VND
+        - Output: EV/EBITDA
+        """
+        is_df = self.dfs.get('INCOME STATEMENT')
+        bs_df = self.dfs.get('BALANCE SHEET')
+        fi = self.dfs.get('FINANCIAL INDEX')
+        
+        if is_df is None or bs_df is None or fi is None:
+            return None
+
+        years = self._get_years(is_df)
+        latest = years[-1]
+        
+        # Base Values from Data
+        ebitda_row = self._get_row(is_df, r'^EBITDA$')
+        rev_row = self._get_row(is_df, r'^Doanh số thuần$')
+        
+        if ebitda_row is None or rev_row is None:
+            return None
+            
+        ebitda_base = float(ebitda_row[latest])
+        rev_base = float(rev_row[latest])
+        opex_base = rev_base - ebitda_base
+        
+        # Cost Breakdown
+        fuel_cost_base = opex_base * fuel_opex_ratio
+        non_fuel_opex_base = opex_base * (1 - fuel_opex_ratio)
+        
+        # Debt & Equity
+        mc_row = self._get_row(fi, r'^Vốn hóa$|Market Cap')
+        if mc_row is None:
+            return None
+        mc_base = float(mc_row[latest])
+        
+        nnh = self._get_row(bs_df, r'^Nợ ngắn hạn$')
+        ndh = self._get_row(bs_df, r'^Nợ dài hạn$')
+        if nnh is None or ndh is None:
+            debt_total_base = 0.0
+        else:
+            debt_total_base = float(nnh[latest]) + float(ndh[latest])
+        
+        cash_row = self._get_row(bs_df, r'^Tiền và các khoản tương đương tiền$|^Tiền và tương đương tiền$')
+        cash_base = float(cash_row[latest]) if cash_row is not None else 0.0
+        
+        # 3. Income Statement / Cash Impact Base
+        ni_row = self._get_row(is_df, r'^Lãi/\(lỗ\) thuần sau thuế$')
+        ni_base = float(ni_row[latest]) if ni_row is not None else 0.0
+        interest_row = self._get_row(is_df, r'^Chi phí lãi vay$')
+        interest_base = abs(float(interest_row[latest])) if interest_row is not None else 0.0
+
+        # Ranges
+        oil_vals = np.arange(oil_range[0], oil_range[1] + oil_range[2] / 2, oil_range[2])
+        fx_vals = np.arange(fx_range[0], fx_range[1] + fx_range[2] / 2, fx_range[2])
+        
+        matrix_ev = np.zeros((len(fx_vals), len(oil_vals)))
+        matrix_ni = np.zeros((len(fx_vals), len(oil_vals)))
+        
+        # We also want to return the 'deltas' for the exact sliders provided
+        # (Though the heatmap covers the range, these components are useful for the 'Live Impact' UI)
+        
+        for i, fx in enumerate(fx_vals):
+            for j, oil in enumerate(oil_vals):
+                # A. EBITDA Impact (Impacts Operating Profit)
+                fuel_new = fuel_cost_base * (oil / base_oil) * (fx / base_fx)
+                non_fuel_new = non_fuel_opex_base * (fx / base_fx)
+                new_ebitda = rev_base - (fuel_new + non_fuel_new)
+                
+                # B. Financial / Net Profit Impact
+                # 1. Fuel cost delta
+                fuel_delta = fuel_new - fuel_cost_base
+                # 2. Interest cost delta (assume interest scales with FX if debt is USD)
+                interest_new = interest_base * (1 - usd_debt_ratio) + (interest_base * usd_debt_ratio * fx / base_fx)
+                int_delta = interest_new - interest_base
+                # 3. FX Revaluation Loss (Non-cash but hits NI)
+                debt_usd = (float(nnh[latest]) + float(ndh[latest])) * usd_debt_ratio
+                fx_reval_loss = debt_usd * (fx / base_fx - 1)
+                
+                new_ni = ni_base - fuel_delta - int_delta - fx_reval_loss
+                matrix_ni[i, j] = round(new_ni, 1)
+
+                # C. EV calculation
+                debt_total_base = float(nnh[latest]) + float(ndh[latest])
+                new_debt = (debt_total_base * (1 - usd_debt_ratio)) + (debt_total_base * usd_debt_ratio * fx / base_fx)
+                new_ev = mc_base + new_debt - cash_base
+                
+                if new_ebitda > 0:
+                    matrix_ev[i, j] = round(new_ev / new_ebitda, 2)
+                else:
+                    matrix_ev[i, j] = np.nan
+                    
+        return {
+            'matrix': matrix_ev,
+            'ni_matrix': matrix_ni,
+            'oil_labels': [f'${o}' for o in oil_vals],
+            'fx_labels': [f'{f:,.0f}' for f in fx_vals],
+            'oil_vals': oil_vals,
+            'fx_vals': fx_vals,
+            'base_data': {
+                'ebitda': ebitda_base,
+                'revenue': rev_base,
+                'debt': float(nnh[latest]) + float(ndh[latest]),
+                'mc': mc_base,
+                'cash': cash_base,
+                'ni': ni_base,
+                'fuel_cost': fuel_cost_base,
+                'interest': interest_base
+            }
+        }
+
+    # =========================================================================
+    # Scenario Analysis (Line Chart)
+    # =========================================================================
+    def scenario_analysis(self):
+        """
+        Dự phóng 3 kịch bản EV/EBITDA từ 2023 - 2028:
+        - Kịch bản Cơ sở: Jet Fuel $85-90, tăng trưởng ổn định.
+        - Kịch bản Tiêu cực: Sốc giá dầu/tỷ giá, EBITDA sụt giảm.
+        - Kịch bản Tích cực: Long Thành (2026), Trung Quốc phục hồi, Yield tối ưu.
+        """
+        is_df = self.dfs.get('INCOME STATEMENT')
+        fi_df = self.dfs.get('FINANCIAL INDEX')
+        bs_df = self.dfs.get('BALANCE SHEET')
+        
+        if is_df is None or fi_df is None or bs_df is None:
+            return None
+
+        years_hist = self._get_years(is_df)
+        latest_year = int(years_hist[-1])
+        proj_years = [str(y) for y in range(latest_year, latest_year + 6)] # 2023 to 2028
+        
+        # Base values from latest year
+        ebitda_row = self._get_row(is_df, r'^EBITDA$')
+        if ebitda_row is None: return None
+        ebitda_latest = float(ebitda_row[str(latest_year)])
+        
+        ev_row = self._get_row(fi_df, r'^EV \(Enterprise Value\)')
+        if ev_row is None:
+             # Fallback calculation if EV row missing
+             mc_row = self._get_row(fi_df, r'^Vốn hóa$|Market Cap')
+             nnh_row = self._get_row(bs_df, r'^Nợ ngắn hạn$')
+             ndh_row = self._get_row(bs_df, r'^Nợ dài hạn$')
+             cash_row = self._get_row(bs_df, r'^Tiền và tương đương tiền$|^Tiền và các khoản tương đương tiền$')
+             
+             if any(r is None for r in [mc_row, nnh_row, ndh_row, cash_row]):
+                 ev_latest = 0.0
+             else:
+                 ev_latest = float(mc_row[str(latest_year)]) + float(nnh_row[str(latest_year)]) + float(ndh_row[str(latest_year)]) - float(cash_row[str(latest_year)])
+        else:
+            ev_latest = float(ev_row[str(latest_year)])
+
+        if ebitda_latest <= 0: # Avoid division by zero, use a small proxy if needed or cap
+            ebitda_latest = 1000.0 # Placeholder for distressed recovery start
+
+        # Scenario Projections
+        ebitda_base = [ebitda_latest]
+        ebitda_neg = [ebitda_latest]
+        ebitda_pos = [ebitda_latest]
+        
+        ev_base = [ev_latest]
+        ev_neg = [ev_latest]
+        ev_pos = [ev_latest]
+
+        for i in range(1, 6): # years 1 to 5
+            # Base Scenario: 7% EBITDA growth, 3% EV growth
+            ebitda_base.append(ebitda_base[-1] * 1.07)
+            ev_base.append(ev_base[-1] * 1.03)
+            
+            # Negative Scenario: Year 1 shock (-20% EBITDA), then 2% recovery. EV increases 10% (debt burden)
+            if i == 1:
+                ebitda_neg.append(ebitda_neg[-1] * 0.8)
+                ev_neg.append(ev_neg[-1] * 1.15)
+            else:
+                ebitda_neg.append(ebitda_neg[-1] * 1.02)
+                ev_neg.append(ev_neg[-1] * 1.01)
+                
+            # Positive Scenario: Year 1-2 (12% recovery), Year 3+ (Long Thành + Yield: 35% jump)
+            if i < 3:
+                ebitda_pos.append(ebitda_pos[-1] * 1.12)
+                ev_pos.append(ev_pos[-1] * 1.02)
+            else:
+                ebitda_pos.append(ebitda_pos[-1] * 1.35)
+                ev_pos.append(ev_pos[-1] * 0.97) # Significant FCFF reduces Net Debt
+
+        # Calculate EV/EBITDA ratios
+        ratio_base = [ev / eb for ev, eb in zip(ev_base, ebitda_base)]
+        ratio_neg = [ev / eb for ev, eb in zip(ev_neg, ebitda_neg)]
+        ratio_pos = [ev / eb for ev, eb in zip(ev_pos, ebitda_pos)]
+        
+        return {
+            'years': proj_years,
+            'base': [round(r, 2) for r in ratio_base],
+            'negative': [round(r, 2) for r in ratio_neg],
+            'positive': [round(r, 2) for r in ratio_pos]
+        }
+
+    # =========================================================================
     # What-if ROE Simulator
     # =========================================================================
     def football_field_data(self, valuation_bands_res, dcf_matrix_res):
