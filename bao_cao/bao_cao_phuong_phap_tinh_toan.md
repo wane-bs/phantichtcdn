@@ -176,3 +176,84 @@ Hệ thống có cơ chế **"Cạch mặt dữ liệu nhiễu"** (hàm `_clean_
 > Toàn bộ kết quả tính toán và dự báo được lưu trữ tại:
 > - `output/2_calculated/`: Các file CSV chỉ số tài chính.
 > - `output/4_advanced/`: Các file dữ liệu JSON/CSV phục vụ biểu đồ mô phỏng.
+
+---
+
+# PHẦN III: HỆ THỐNG BIỂU ĐỒ & DASHBOARD (app.py)
+
+Hệ thống biểu đồ trên giao diện Streamlit (`app.py`) được thiết kế trực quan hóa các chỉ số tài chính, giúp nhận diện nhanh chóng rủi ro cấu trúc và mẫu hình kinh doanh. Dưới đây là phân loại biểu đồ, cùng với công thức, phương trình và mô hình hiển thị tương ứng cho từng tab:
+
+## Tab 1: Khả năng sinh tồn (Cơ cấu Tài chính)
+Trọng tâm: Đánh giá sức khỏe tài chính cơ bản, cơ cấu thanh khoản và biên độ sinh tồn dòng tiền.
+
+1. **Cơ cấu Nguồn vốn (Bar Chart / Biểu đồ cột nhóm)**
+   - **Chỉ tiêu:** Nợ ngắn hạn, Nợ dài hạn, Vốn Chủ Sở Hữu (VCSH).
+   - **Mô hình:** Hiển thị số dư tuyệt đối (tỷ VND). Định dạng gộp nhóm cho phép đối sánh nhanh mức độ bao phủ bằng nguồn Vốn Chủ so với áp lực nợ phân bổ theo kỳ hạn.
+2. **Tỷ trọng dòng tiền theo hoạt động (100% Stacked Area / Biểu đồ miền xếp chồng)**
+   - **Mô hình:** Chuẩn hóa phần trăm theo trị tuyệt đối từng dòng tiền hoạt động nhằm xác định trọng tâm chiến lược luân chuyển tiền.
+   - **Công thức:** $\%CF_i = \frac{|CF_i|}{|OCF| + |ICF| + |FCF|} \times 100$
+3. **Cấu trúc Tài sản & Biến động Tài sản (100% Stacked Bar & Line Chart)**
+   - **Công thức tải trọng tài sản:** $\frac{Khoản\ mục_{tương\ đối}}{Tổng\ tài\ sản} \times 100$ 
+   - Đồng thời đối chiếu xu hướng dài hạn giữa Tài sản ngắn hạn, Tổng tài sản, Tài sản cố định bằng biểu đồ đường đa biến.
+4. **Thực Thu − Thực Chi − Dòng tiền Ròng (Combo Series: Line & Marker)**
+   - Phân rã dòng tiền (VAS 24) biểu thị mốc Thực Thu / Thực Chi, trong đó phần bù Dòng tiền Ròng (Bar Overlay) được quy ước xanh dương (+) hay đỏ (-).
+5. **Cảnh báo biên độ an toàn (Liquidity DSCR & Runway Charts)**
+   - **Diễn biến tự phục vụ nợ (DSCR Bars & Stress Line):** Căn cứ tỷ suất đảm bảo nợ, áp dụng kịch bản sốc 30% sụt giảm từ dòng tiền cốt lõi (CFO) kết hợp tăng 20% chi phí lãi vay (Interest).
+   - **Khoảng cách sinh tồn (Liquidity Runway Bars):** 
+     - **Công thức mô hình:** $Runway_{tháng} = \frac{Tiền\ mặt\ +\ Đầu\ tư\ ngắn\ hạn}{Chi\ phí\ cố\ định\ hàng\ tháng}$
+     - Cho biết doanh nghiệp có thể hấp thụ cú sốc doanh thu ngừng trệ trong bao nhiêu tháng tiếp nối (Thước đo Baseline: Vùng xanh $\geq 12$, Vùng cảnh báo vàng 6-12).
+
+## Tab 2: Chất lượng BCTC (Anomaly)
+Trọng tâm: Đo lường chất lượng lợi nhuận và dấu hiệu rủi ro.
+
+1. **Rủi ro Bất thường Tức thời (Gauge / Dashboard Đồng hồ đo)**
+   - Đo lường chỉ số năm gần nhất phân vạch ngưỡng rủi ro:
+     - **Beneish M-Score:** Phân loại cảnh báo gian lận hoặc "làm mượt" lợi nhuận. Ranh giới đỏ khi $M > -2.22$.
+     - **Altman Z''-Score:** Cảnh báo nguy cơ phá sản, vùng xám ($1.1 - 2.6$).
+     - **Sloan Accruals:** Đánh giá chất lượng dòng tiền dồn tích. Ranh giới $\pm 10$ đến $\pm 25\%$.
+2. **Kịch bản Bất thường Lịch sử (Line Chart / Biểu đồ đường)**
+   - Biểu thị chuỗi theo thời gian. Mức độ xuyên thủng ranh giới ngang (dash lines) biểu thị cấu hình thay đổi chất lượng BCTC và mức độ rủi ro hệ đối chiếu.
+
+## Tab 3: Kết luận Mẫu hình
+Trọng tâm: Đúc kết phương hướng kinh doanh và đưa ra khuyến nghị hệ thống.
+
+1. **Diễn biến Mô hình Kinh doanh Qua các năm (Timeline Scatter Chart / Chuỗi trượt phân loại)**
+   - Sử dụng các hình thoi hiển thị quy tắc kinh doanh năm (ví dụ: Bán lẻ, Thâm dụng vốn) thông qua engine phân loại tự động sử dụng cấu trúc tỷ trọng của nhóm chỉ tiêu "chìa khóa" (Asset ratio, Profit margins, ...).
+2. **Quản trị Tín hiệu Báo cáo**
+   - Chỉ số định lượng đặc trưng tại chu kỳ cuối cùng biểu thị tỷ trọng phần khối (ví dụ: `TSCĐ/Tổng TS %`, `Hàng tồn kho/Tổng TS %`).
+
+## Tab 4: Hiệu suất Mẫu hình (Operating)
+Trọng tâm: Đánh giá biên lợi nhuận ròng, mô hình chi phí và cơ cấu phân tách DuPont.
+
+1. **Đòn bẩy Hoạt động (Operating Leverage & Margin Gap)**
+   - **Khoảng hở hòa vốn (Filled Area Chart):** $Doanh\ thu\ thuần - |Giá\ vốn| = Lãi\ gộp$. Diện tích được tô màu biểu thị phần đệm lợi nhuận.
+   - **Đòn bẩy Hoạt động (Combo Bar-Line, Scatter threshold):** Kết hợp cột doanh thu, cột định phí, biên EBIT bằng đường nét kẻ.
+     - **Định phí phân bổ (FC):** $\approx Khấu\ hao\ TSCĐ + Chi\ phí\ bán\ hàng + Chi\ phí\ quản\ lý$
+     - **Cơ chế DOL Index:** $DOL_{n+1} = \frac{\Delta EBIT\%}{\Delta Doanh\ thu\%}$ — Độ nhạy mỗi $1\%$ tăng doanh thu lên $EBIT$.
+     - **Điểm hòa vốn lý thuyết (Break-even):** Ngưỡng vạch ngang phân cực $\approx 121,000$ tỷ (Doanh thu yêu cầu vượt rào để có EBIT dương).
+2. **Khả năng Sinh lời & P/E, P/B (Multi-line Chart)**
+   - Đường khuynh hướng thể hiện Tỷ suất Biên, kèm mốc hình chữ nhật khối cho vùng kháng cự $EV/EBITDA$ hoặc $EV/Revenue$.
+3. **Phân rã Biên lợi nhuận cấu trúc (DuPont Subplots / Secondary Y-Axis)**
+   - Trực quan hóa tương quan đóng góp vào $ROE$: Mở rộng $ROS$, $Asset\ Turnover$, $Financial\ Leverage$ (Bar) tương thích xu hướng quy chiếu $ROE$ biểu thị qua trục Secondary Y (Đường vàng đứt nét).
+4. **Phân tách Thay đổi Chuỗi (Best-fit OLS Factor Impact / Grouped Bar)**
+   - **Mô hình Bar:** Chỉ định số điểm phần trăm $\%\ pts$ mà mỗi yếu tố (ví dụ NOPAT Margin, IC Turnover) bù đắp ròng vào $\Delta ROIC$ toàn diện. Dữ liệu chuẩn được phân vùng riêng rẽ bằng tổ hợp "Best Chain OLS".
+
+## Tab 5: Định giá Doanh nghiệp (Enterprise Value Framework)
+Trọng tâm: Trực quan hóa giá trị doanh nghiệp, quy hoạch kỳ vọng cơ sở và mô phỏng tác động vi mô/vĩ mô. Bằng phương pháp **Định giá Doanh nghiệp EV** thay vì vốn dĩ truyền thống (DCF thuần) để giải quyết bất ổn cho HVN.
+
+1. **Phân rã Chu kỳ Thời gian STL (Decomposition Subplots / Scatter Line & Bar)**
+   - **Mô hình chuẩn:** $Y_t = Trend_t + Seasonal_t + Residual_t$. Chuỗi nguyên bản được chia tách, cho phép nhìn nhận yếu tố năng lực cốt lõi tách biệt khỏi dao động ngoại cảnh và yếu tố chu kỳ ngắn.
+2. **Dải Định giá Lịch sử (Valuation Bands / Multi-Line)**
+   - **Phương trình mô phỏng:** 
+     - Dải đắt đỏ: $+1\sigma\ \&\ +2\sigma$. Mức kỳ vọng chung (Mean). Dải giá trũng: $-1\sigma\ \&\ -2\sigma$.
+     - Khối tham số **Band Position**: $\frac{EV/EBITDA\ hiện\ tại - (\mu - \sigma)}{2\sigma}$
+3. **Ma trận Định giá DCF (Terminal Value - Heatmap Box)**
+   - Trục hoành: Tăng trưởng $EBITDA\ Growth\ (\%)$ ; Trục tung: $WACC\ Cấu\ thành\ (\%)$. Giao diện Heatmap cung cấp độ nhạy Enterprise Value khi định lượng tham số. Terminal Multiple tự động đồng bộ hóa $Median$.
+4. **Ma trận Nhạy cảm Cấu trúc - Vĩ mô Oil & FX (Live Score & Heatmap Grid)**
+   - Lõi tham số bù dịch $VND/USD$ theo nợ dư USD hiện diện thực. Lõi rủi ro Giá dầu Jet A1 phân vùng theo Opex. 
+   - **Live Impact Output:** Kịch bản biến động $\pm 1\%$ FX hay $\pm\$10$ Jet A1 trực tiếp báo lãi/lỗ kỳ hạn qua Indicator Metric, bổ trợ bảng đo định mức (EV/EBITDA hoặc Lợi nhuận ròng).
+5. **Kịch bản Định giá Phân kỳ (Scenario Analysis / Multi-line Area)**
+   - Dự án 3 rẽ nhanh: Base/Positive/Negative ($EV/EBITDA$) chạy tiến định hướng đến $2028$. 
+6. **Football Field Chart (Horizontal Oriented Bar / Biểu đồ hộp trục ngang)**
+   - **Cấu trúc:** Nhóm hợp nhất dải định giá biên độ Min-Max theo các công cụ đo lường quy hồi lịch sử (EV/EBITDA $\pm1\sigma$) và DCF Valuation. Biểu diễn độ vươn (Gap) Min-Max nằm trên lưới ngang giá trị Enterprise Value tuyệt đối. 
+   - **Tích phân Mục tiêu:** Hiển thị mốc "EV Hiện Tại" song song với bộ chuyển hóa (Conversion Metric Card) ra $Target\ Price\ (VND/$cổ phiếu$)$ tại phân vùng giao diện UI, dựa theo phép trừ Nợ ròng và Lợi ích cổ đông thiểu số khỏi Enterprise Value.
