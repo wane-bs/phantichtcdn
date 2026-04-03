@@ -251,8 +251,18 @@ class Forecaster:
                 ebitda_base = 2000.0
                 
         if ev_ebitda_multiple is None:
-            # Theo yêu cầu, cấu hình cứng Bội số mục tiêu DCF Terminal là 12.2x
-            ev_ebitda_multiple = 12.2
+            if fi is not None:
+                ev_ebitda_row = self._get_row(fi, r'^EV/EBITDA$')
+                if ev_ebitda_row is not None:
+                    years = self._get_years(fi)
+                    # Lấy mean của các EV/EBITDA dương (Loại bỏ các năm crisis)
+                    hist_multiples = ev_ebitda_row[years].astype(float)
+                    ev_ebitda_multiple = float(hist_multiples[hist_multiples > 0].mean())
+                    if pd.isna(ev_ebitda_multiple): ev_ebitda_multiple = 8.0
+                else:
+                    ev_ebitda_multiple = 8.0
+            else:
+                ev_ebitda_multiple = 8.0
 
         wacc_vals = np.arange(wacc_range[0], wacc_range[1] + wacc_range[2] / 2, wacc_range[2])
         g_vals = np.arange(ebitda_growth_range[0], ebitda_growth_range[1] + ebitda_growth_range[2] / 2, ebitda_growth_range[2])
