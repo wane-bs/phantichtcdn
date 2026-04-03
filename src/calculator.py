@@ -350,6 +350,7 @@ class Calculator:
             debt_vals = debt_row[years].astype(float)
 
         cash_row = self._get_row(bs_df, r'^Tiền và tương đương tiền')
+        mi_row = self._get_row(is_df, r'^Lợi ích của cổ đông thiểu số') # Extract Minority Interest
         ebitda_row = self._get_row(is_df, r'^EBITDA$')
         rev_row = self._get_row(is_df, r'^Doanh số thuần$')
         cap_row = self._get_row(fi_df, r'^Vốn hóa$|Market Cap')
@@ -360,6 +361,12 @@ class Calculator:
             row_nd.update(net_debt.to_dict())
             new_rows.append(row_nd)
 
+            # Store Minority Interest if found
+            mi_vals = pd.Series([0.0]*len(years), index=years)
+            if mi_row is not None:
+                mi_vals = mi_row[years].astype(float).fillna(0)
+                new_rows.append({'Khoản mục': 'Lợi ích CĐ thiểu số', **mi_vals.to_dict()})
+
             if ebitda_row is not None:
                 ebitda_vals = ebitda_row[years].astype(float).replace(0, np.nan)
                 ratio = net_debt / ebitda_vals
@@ -369,7 +376,8 @@ class Calculator:
             
             if cap_row is not None:
                 cap = cap_row[years].astype(float)
-                ev = cap + net_debt
+                # EV = Cap + NetDebt + Minority Interest (as per doc)
+                ev = cap + net_debt + mi_vals
                 row_ev = {'Khoản mục': 'EV (Enterprise Value)'}
                 row_ev.update(ev.to_dict())
                 new_rows.append(row_ev)

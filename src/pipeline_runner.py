@@ -49,7 +49,8 @@ def run_pipeline():
     try:
         from forecaster import Forecaster
         forecaster = Forecaster(in_dir="output/2_calculated")
-        fore_results = forecaster.run_all()
+        # Áp dụng Chiết khấu rủi ro tái cấu trúc 40% mặc định theo đề xuất của người dùng
+        fore_results = forecaster.run_all(discount=0.4)
         forecaster.save_outputs(fore_results, "output/4_advanced")
         print(f"Hoàn thành Stage 4.1 ({time.time()-start:.2f}s)")
     except Exception as e:

@@ -69,6 +69,21 @@ class DataProcessor:
             
             df = pd.DataFrame(cleaned_rows)
             
+            # Sanitization: Clean column names (strip spaces, newlines)
+            new_column_names = {col: str(col).strip() for col in df.columns}
+            df.rename(columns=new_column_names, inplace=True)
+            
+            # Sort columns: 'Khoản mục' first, then years chronologically
+            year_cols = [c for c in df.columns if c != 'Khoản mục']
+            # Attempt to sort numerically
+            try:
+                sorted_years = sorted(year_cols, key=lambda x: int(str(x).split('.')[0]))
+                df = df[['Khoản mục'] + sorted_years]
+            except:
+                # Fallback to alphanumeric sort if int conversion fails
+                sorted_years = sorted(year_cols)
+                df = df[['Khoản mục'] + sorted_years]
+
             # Strip whitespace in item names again to be safe
             df['Khoản mục'] = df['Khoản mục'].astype(str).str.strip()
             

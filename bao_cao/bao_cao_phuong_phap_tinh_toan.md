@@ -18,7 +18,7 @@ Tài liệu này chi tiết hóa toàn bộ các công thức, logic tính toán
 | **FCFE** | $FCFF - Lãi\ vay + (Vay\ mới - Trả\ nợ\ gốc)$ | CF, IS |
 | **CFO / Gross Debt** | $CFO / (Nợ\ ngắn\ hạn + Nợ\ dài\ hạn)$ | CF, BS |
 | **Net Debt / EBITDA** | $(Nợ\ vay\ có\ lãi - Tiền\ mặt) / EBITDA$ | FI, BS, IS |
-| **EV (Enterprise Value)** | $Vốn\ hóa + Nợ\ ròng$ | FI, BS |
+| **EV (Enterprise Value)** | $Vốn\ hóa + Nợ\ ròng + Lợi\ ích\ CĐ\ thiểu\ số$ | FI, BS, IS |
 
 > [!NOTE]
 > **Nợ vay có lãi (Interest-bearing Debt):** Do dữ liệu thô không tách biệt, hệ thống tính ngược bằng công thức: `Tổng tài sản * (Hệ số Vốn vay/Tổng vốn)`.
@@ -111,7 +111,7 @@ Bóc tách các chỉ số tài chính (Doanh thu, EBITDA, OCF) thành 3 thành 
 Xác định vùng giá trị "Rẻ - Đắt" của HVN dựa trên phân phối xác suất của chỉ số `EV/EBITDA` thu thập từ `calculator.py`.
 *   **Thành phần cơ sở (từ `calculator.py`):**
     *   $EBITDA = EBIT + Khấu\ hao$
-    *   $EV = Vốn\ hóa + (Nợ\ vay - Tiền\ mặt)$
+    *   $EV = Vốn\ hóa + (Nợ\ vay - Tiền\ mặt) + Lợi\ ích\ CĐ\ thiểu\ số$
 *   **Công thức thống kê (từ `forecaster.py`):**
     *   **Mean Line ($\mu$):** Giá trị trung bình mẫu của chuỗi $EV/EBITDA$ lịch sử.
     *   **Độ lệch chuẩn ($\sigma$):** $\sigma = \sqrt{\frac{\sum_{i=1}^{n} (x_i - \mu)^2}{n-1}}$
@@ -143,8 +143,22 @@ Mô phỏng 3 kịch bản tiến hóa của doanh nghiệp đến năm 2028:
 *   **Tiêu cực (Negative):** Sốc chi phí đầu vào hoặc sụt giảm nhu cầu vận tải.
 *   **Tích cực (Positive):** Đi vào hoạt động sân bay Long Thành (2026), phục hồi thị trường quốc tế vượt kỳ vọng.
 
-## 12. Định giá Tổng hợp (Football Field)
-Biểu đồ tổng hợp các vùng giá trị từ các phương pháp khác nhau để đưa ra nhận định khách quan về giá trị thực của doanh nghiệp.
+## 13. Quy đổi Giá mục tiêu (Target Price Conversion)
+Hệ thống thực hiện phép tính quy đổi ngược từ Giá trị Doanh nghiệp (EV) sang giá mỗi cổ phiếu để đưa ra khuyến nghị cụ thể.
+
+*   **Bước 1: Tính Giá trị vốn cổ phần (Equity Value)**
+    $$EV_{Mục\ tiêu} = (EBITDA_{Dự\ phóng} \times EV/EBITDA_{Lịch\ sử}) \times (1 - Chiết\ khấu\ rủi\ ro)$$
+    $$Equity\ Value = EV_{Mục\ tiêu} - Nợ\ ròng - Lợi\ ích\ CĐ\ thiểu\ số$$
+*   **Bước 2: Tính Giá mục tiêu (Target Price)**
+    $$Target\ Price = Equity\ Value / Số\ CP\ lưu\ hành$$
+
+> [!IMPORTANT]
+> **Chiết khấu rủi ro tái cấu trúc (Restructuring Discount):** 
+> HVN hiện tại đối mặt với "núi nợ" và gánh nặng tài chính lớn hơn nhiều so với giai đoạn hoàng kim. Hệ thống cho phép áp dụng mức chiết khấu (mặc định 40%) để điều chỉnh kỳ vọng định giá về mức an toàn, giúp đồng bộ hóa kết quả giữa phương pháp EV/EBITDA và DCF.
+
+> [!IMPORTANT]
+> **Xử lý dữ liệu nhiễu (Dữ liệu HVN):** 
+> Trong giai đoạn khủng hoảng (2020-2022), HVN có EBITDA âm dẫn đến các hệ số EV/EBITDA lịch sử bị âm hoặc cực kỳ thấp. Để đảm bảo dải định giá có ý nghĩa kinh tế, hệ thống loại bỏ các giá trị EV/EBITDA $\leq 0$ khỏi tập dữ liệu tính toán Mean và StdDev.
 
 ---
 

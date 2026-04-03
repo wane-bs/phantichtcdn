@@ -1066,7 +1066,21 @@ Phương pháp: <b>EV/EBITDA Mean Reversion</b> + <b>DCF Terminal Value Integrat
 
         try:
             forecaster_obj = Forecaster(dfs)
-            f_results = forecaster_obj.run_all()
+            
+            # --- Tích hợp Chiết khấu Rủi ro tái cấu trúc ---
+            st.markdown("##### ⚙️ Thiết lập Tham số Định giá")
+            col_d1, col_d2 = st.columns([2, 3])
+            with col_d1:
+                discount_val = st.slider(
+                    "Chiết khấu Rủi ro tái cấu trúc (%)", 
+                    0, 100, 40, 5,
+                    help="Chiết khấu giá trị định giá lịch sử để phản ánh gánh nặng nợ vay và rủi ro tái cấu trúc hiện tại (Gợi ý: 30-40%)."
+                )
+                discount = discount_val / 100.0
+            with col_d2:
+                st.info(f"Đang áp dụng mức chiết khấu **{discount_val}%** vào mô hình EV/EBITDA History.")
+
+            f_results = forecaster_obj.run_all(discount=discount)
         except Exception as e:
             st.error(f"Lỗi khởi tạo module Forecaster: {e}")
             f_results = {}
@@ -1339,13 +1353,18 @@ Phương pháp: <b>EV/EBITDA Mean Reversion</b> + <b>DCF Terminal Value Integrat
         st.divider()
 
         # ---- 5.4 FOOTBALL FIELD CHART ----
-        st.subheader("⚽ 4. Football Field Chart — So sánh Dải Giá trị")
+        st.subheader("⚽ 4. Football Field Chart — So sánh Dải Giá trị & Giá mục tiêu")
         ff = f_results.get('FOOTBALL_FIELD')
         if ff:
             methods = ['EV/EBITDA (±1σ)', 'DCF TV Integration']
             mins = [ff['ev_ebitda_min'] / 1e9, ff['dcf_min'] / 1e9]
             maxs = [ff['ev_ebitda_max'] / 1e9, ff['dcf_max'] / 1e9]
             current_ev_b = ff['current_ev'] / 1e9
+            
+            # Giá mục tiêu tương ứng (VND/cổ phiếu)
+            prices_min = [ff['price_ebitda_min'], ff['price_dcf_min']]
+            prices_max = [ff['price_ebitda_max'], ff['price_dcf_max']]
+            price_curr = ff['price_current']
 
             fig_ff = go.Figure()
             bar_colors = [COLORS['teal'], COLORS['purple']]
@@ -1357,31 +1376,61 @@ Phương pháp: <b>EV/EBITDA Mean Reversion</b> + <b>DCF Terminal Value Integrat
                     name=method,
                     marker_color=bar_colors[i],
                     opacity=0.75,
-                    text=[f'{mins[i]:,.0f} – {maxs[i]:,.0f} tỷ'],
+                    text=[f'{mins[i]:,.0f} – {maxs[i]:,.0f} tỷ EV<br>({prices_min[i]:,.0f} – {prices_max[i]:,.0f} VND/cp)'],
                     textposition='inside',
-                    textfont=dict(size=13, color='white')
+                    textfont=dict(size=12, color='white')
                 ))
 
             fig_ff.add_vline(
                 x=current_ev_b, line_dash='dash', line_color=COLORS['yellow'], line_width=2.5,
-                annotation_text=f'EV hiện tại: {current_ev_b:,.0f} tỷ',
+                annotation_text=f'EV hiện tại: {current_ev_b:,.0f} tỷ (Giá: {price_curr:,.0f})',
                 annotation_position='top right',
                 annotation_font=dict(color=COLORS['yellow'], size=14)
             )
 
             fig_ff.update_layout(
-                title='So sánh Dải Giá trị Doanh nghiệp (Enterprise Value)',
+                title='So sánh Dải Giá trị Doanh nghiệp & Giá mục tiêu tương ứng',
                 xaxis_title='Enterprise Value (tỷ VND)',
                 barmode='overlay',
                 **DARK_TEMPLATE,
-                height=300,
+                height=350,
                 showlegend=True,
                 legend=dict(orientation='h', y=-0.25)
             )
             st.plotly_chart(fig_ff, use_container_width=True)
+            
+            st.markdown(f"""
+            <div class="metric-card">
+                <h4 style='color: white; margin-bottom: 10px;'>🎯 Tóm lược Giá mục tiêu (Target Price)</h4>
+                <div style='display: flex; justify-content: space-around; align-items: center;'>
+                    <div style='text-align: center; flex: 1;'>
+                        <p style='color: #888; font-size: 0.85em; margin-bottom: 4px;'>Theo EV/EBITDA History (Đã chiết khấu)</p>
+                        <p style='color: {COLORS["teal"]}; font-size: 1.6em; font-weight: bold;'>
+                            {f"{ff['price_ebitda_min']:,.0f}" if ff['price_ebitda_min'] > 0 else "N/A"} – 
+                            {f"{ff['price_ebitda_max']:,.0f}" if ff['price_ebitda_max'] > 0 else "N/A"}
+                        </p>
+                        <p style='color: #888; font-size: 0.75em;'>VND / cổ phiếu</p>
+                    </div>
+                    <div style='width: 1px; height: 50px; background: rgba(255,255,255,0.1);'></div>
+                    <div style='text-align: center; flex: 1;'>
+                        <p style='color: #888; font-size: 0.85em; margin-bottom: 4px;'>Theo DCF Integration</p>
+                        <p style='color: {COLORS["purple"]}; font-size: 1.6em; font-weight: bold;'>
+                            {f"{ff['price_dcf_min']:,.0f}" if ff['price_dcf_min'] > 0 else "N/A"} – 
+                            {f"{ff['price_dcf_max']:,.0f}" if ff['price_dcf_max'] > 0 else "N/A"}
+                        </p>
+                        <p style='color: #888; font-size: 0.75em;'>VND / cổ phiếu</p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
             st.markdown(
-                '<div class="info-box"><b>Kết luận:</b> Nếu EV hiện tại nằm <b>dưới</b> vùng giao thoa của cả hai dải giá trị → '
-                'Tín hiệu <b>Undervalued</b>. Nếu nằm <b>trên</b> vùng giao thoa → Tín hiệu <b>Overvalued</b>.</div>',
+                '<div class="info-box">'
+                '<b>Cơ chế quy đổi:</b> Lượng tiền mặt khổng lồ gần 9.000 tỷ đồng huy động được từ đợt phát hành cổ phiếu '
+                'đã làm giảm trực tiếp "Nợ thuần". Về mặt toán học, khi Nợ thuần giảm, Giá trị vốn cổ phần (Equity Value) '
+                'sẽ tăng lên tương ứng, từ đó nâng đỡ giá mục tiêu của cổ phiếu.<br>'
+                '<i>Công thức: Equity Value = EV - Nợ thuần - Lợi ích CĐ thiểu số</i>'
+                '</div>',
                 unsafe_allow_html=True
             )
         else:

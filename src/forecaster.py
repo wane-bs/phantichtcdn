@@ -41,7 +41,18 @@ class Forecaster:
         return None
 
     def _get_years(self, df):
-        return [c for c in df.columns if c != 'Khoản mục']
+        if df is None: return []
+        # Filter: Only keep columns that can be cast to int (numeric years)
+        years = []
+        for c in df.columns:
+            if c != 'Khoản mục':
+                try:
+                    int(str(c).split('.')[0])
+                    years.append(c)
+                except ValueError:
+                    continue
+        # Sort years numerically to ensure years[-1] is the latest
+        return sorted(years, key=lambda x: int(str(x).split('.')[0]))
 
     # =========================================================================
     # STL Decomposition
@@ -150,10 +161,11 @@ class Forecaster:
     # =========================================================================
     # Valuation Bands
     # =========================================================================
-    def valuation_bands(self, series_name=r'^EV/EBITDA$'):
+    def valuation_bands(self, series_name='EV/EBITDA'):
         """
         Tính dải định giá lịch sử dựa trên phân phối của EV/EBITDA.
         Band = mean ± 1σ, ±2σ
+        Lưu ý: Loại bỏ các giá trị âm (do EBITDA âm) để có mean có ý nghĩa.
         """
         fi = self.dfs.get('FINANCIAL INDEX')
         if fi is None:
@@ -165,7 +177,8 @@ class Forecaster:
             return None
             
         series = row[years].astype(float)
-        vals = series.replace(0, np.nan).dropna()
+        # Chỉ lấy các giá trị dương (> 0) để tính toán dải định giá
+        vals = series[series > 0].dropna()
         if len(vals) < 2:
             return None
 
@@ -176,14 +189,15 @@ class Forecaster:
             'original': series,
             'mean': mean_val,
             'upper_1s': mean_val + std_val,
-            'lower_1s': mean_val - std_val,
+            'lower_1s': max(0.1, mean_val - std_val), 
             'upper_2s': mean_val + 2 * std_val,
-            'lower_2s': mean_val - 2 * std_val,
+            'lower_2s': max(0.1, mean_val - 2 * std_val),
             'years': list(series.index),
         }
 
         if std_val != 0:
             current = float(series.iloc[-1])
+            # Normalize current pos between lower_1s and upper_1s
             bands['band_position'] = (current - bands['lower_1s']) / (bands['upper_1s'] - bands['lower_1s'])
         else:
             bands['band_position'] = 0.5
@@ -231,7 +245,9 @@ class Forecaster:
                 ev_ebitda_row = self._get_row(fi, r'^EV/EBITDA$')
                 if ev_ebitda_row is not None:
                     years = self._get_years(fi)
-                    ev_ebitda_multiple = float(ev_ebitda_row[years].astype(float).mean())
+                    # Lấy mean của các EV/EBITDA dương (Loại bỏ các năm crisis)
+                    hist_multiples = ev_ebitda_row[years].astype(float)
+                    ev_ebitda_multiple = float(hist_multiples[hist_multiples > 0].mean())
                     if pd.isna(ev_ebitda_multiple): ev_ebitda_multiple = 8.0
                 else:
                     ev_ebitda_multiple = 8.0
@@ -472,49 +488,82 @@ class Forecaster:
             'positive': [round(r, 2) for r in ratio_pos]
         }
 
+    def ev_to_target_price(self, ev_val, year=None):
+        """
+        Quy đổi từ Enterprise Value (EV) sang Giá mục tiêu mỗi cổ phiếu.
+        Công thức: Equity Value = EV - Nợ thuần - Lợi ích CĐ thiểu số
+                   Giá mục tiêu = Equity Value / Số lượng cổ phiếu lưu hành
+        """
+        fi = self.dfs.get('FINANCIAL INDEX')
+        if fi is None: return 0.0
+        
+        years = self._get_years(fi)
+        target_year = year if year in years else years[-1]
+        
+        # Lấy các thành phần nợ và vốn
+        net_debt_row = self._get_row(fi, r'^Net Debt \(Nợ ròng\)')
+        mi_row = self._get_row(fi, r'^Lợi ích CĐ thiểu số')
+        shares_row = self._get_row(fi, r'^Số CP lưu hành')
+        
+        if net_debt_row is None or shares_row is None:
+            return 0.0
+            
+        net_debt = float(net_debt_row[target_year])
+        mi = float(mi_row[target_year]) if mi_row is not None else 0.0
+        shares = float(shares_row[target_year])
+        
+        if shares <= 0: return 0.0
+        
+        equity_value = ev_val - net_debt - mi
+        target_price = equity_value / shares
+        
+        return round(target_price, 0)
+
     # =========================================================================
     # What-if ROE Simulator
     # =========================================================================
-    def football_field_data(self, valuation_bands_res, dcf_matrix_res):
+    def football_field_data(self, valuation_bands_res, dcf_matrix_res, discount=0.0):
         """
         Tổng hợp dải giá trị từ các phương pháp định giá:
-        1. EV/EBITDA History (1 std dev)
+        1. EV/EBITDA History (1 std dev) - Đã áp dụng chiết khấu
         2. DCF Terminal Value Integration
         3. Current Enterprise Value
         """
-        bs_df = self.dfs.get('BALANCE SHEET')
         fi = self.dfs.get('FINANCIAL INDEX')
         
         current_ev = 0.0
-        if fi is not None and bs_df is not None:
-            years = self._get_years(bs_df)
+        if fi is not None:
+            years = self._get_years(fi)
             latest = years[-1]
-            mc_row = self._get_row(fi, r'^Vốn hóa$')
-            nnh = self._get_row(bs_df, r'^Nợ ngắn hạn$')
-            ndh = self._get_row(bs_df, r'^Nợ dài hạn$')
-            cash = self._get_row(bs_df, r'^Tiền và tương đương tiền$')
-            if cash is None:
-                cash = pd.Series([0]*len(years), index=years)
-                c_row = self._get_row(bs_df, r'^Tiền và các khoản tương đương tiền$')
-                if c_row is not None:
-                    cash = c_row
-
-            if mc_row is not None and nnh is not None and ndh is not None:
-                try:
+            
+            # Sử dụng EV đã tính toán sẵn trong Calculator (đã bao gồm Nợ ròng chuẩn và MI)
+            ev_row = self._get_row(fi, r'^EV \(Enterprise Value\)')
+            if ev_row is not None:
+                current_ev = float(ev_row[latest])
+            else:
+                # Fallback nếu chưa có dòng EV
+                mc_row = self._get_row(fi, r'^Vốn hóa$|Market Cap')
+                nd_row = self._get_row(fi, r'^Net Debt \(Nợ ròng\)')
+                mi_row = self._get_row(fi, r'^Lợi ích CĐ thiểu số')
+                if mc_row is not None and nd_row is not None:
                     mc_val = float(mc_row[latest])
-                    debt_val = float(nnh[latest]) + float(ndh[latest])
-                    cash_val = float(cash[latest])
-                    net_debt = debt_val - cash_val
-                    current_ev = mc_val + net_debt
-                except:
-                    current_ev = 0.0
+                    nd_val = float(nd_row[latest])
+                    mi_val = float(mi_row[latest]) if mi_row is not None else 0.0
+                    current_ev = mc_val + nd_val + mi_val
 
+        # EV/EBITDA History Band (±1 sigma)
         ev_ebitda_min = 0.0
         ev_ebitda_max = 0.0
-        if valuation_bands_res is not None and dcf_matrix_res is not None:
-            ebitda_base = dcf_matrix_res.get('ebitda_base', 0)
-            ev_ebitda_min = ebitda_base * valuation_bands_res.get('lower_1s', 0)
-            ev_ebitda_max = ebitda_base * valuation_bands_res.get('upper_1s', 0)
+        
+        is_df = self.dfs.get('INCOME STATEMENT')
+        if valuation_bands_res and is_df is not None:
+            # Lấy EBITDA cơ sở năm cuối (thường là 2025) từ INCOME STATEMENT
+            ebitda_row = self._get_row(is_df, r'^EBITDA$')
+            if ebitda_row is not None:
+                ebitda_base = float(ebitda_row[years[-1]])
+                # Áp dụng EBITDA x (Mean ± 1s) * (1-discount)
+                ev_ebitda_min = ebitda_base * valuation_bands_res['lower_1s'] * (1 - discount)
+                ev_ebitda_max = ebitda_base * valuation_bands_res['upper_1s'] * (1 - discount)
         
         dcf_min = 0.0
         dcf_max = 0.0
@@ -523,13 +572,22 @@ class Forecaster:
             if mat is not None:
                 dcf_min = np.nanmin(mat)
                 dcf_max = np.nanmax(mat)
-                
+        
+        years = self._get_years(fi)
+        latest = years[-1]
+        
         return {
             'current_ev': round(current_ev, 1),
             'ev_ebitda_min': round(ev_ebitda_min, 1),
             'ev_ebitda_max': round(ev_ebitda_max, 1),
             'dcf_min': round(dcf_min, 1),
-            'dcf_max': round(dcf_max, 1)
+            'dcf_max': round(dcf_max, 1),
+            # Thêm Giá mục tiêu tương ứng
+            'price_current': self.ev_to_target_price(current_ev, latest),
+            'price_ebitda_min': self.ev_to_target_price(ev_ebitda_min, latest),
+            'price_ebitda_max': self.ev_to_target_price(ev_ebitda_max, latest),
+            'price_dcf_min': self.ev_to_target_price(dcf_min, latest),
+            'price_dcf_max': self.ev_to_target_price(dcf_max, latest)
         }
 
     def save_outputs(self, results, out_dir="output/4_advanced"):
@@ -591,7 +649,7 @@ class Forecaster:
     # =========================================================================
     # RUN ALL
     # =========================================================================
-    def run_all(self):
+    def run_all(self, discount=0.0):
         """Chạy các phân tích và trả về dict kết quả."""
         results = {}
 
@@ -600,7 +658,7 @@ class Forecaster:
         if stl:
             results['STL_REVENUE'] = stl
 
-        # Valuation Bands
+        # Valuation Bands (History - Pure)
         vb = self.valuation_bands()
         if vb:
             results['VALUATION_BANDS'] = vb
@@ -610,8 +668,8 @@ class Forecaster:
         if dcf:
             results['DCF_MATRIX'] = dcf
 
-        # Football Field Data
-        football = self.football_field_data(vb, dcf)
+        # Football Field Data (Apply Discount here)
+        football = self.football_field_data(vb, dcf, discount=discount)
         if football:
             results['FOOTBALL_FIELD'] = football
 

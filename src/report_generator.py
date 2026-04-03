@@ -157,12 +157,21 @@ class ReportGenerator:
         ev_max = ff.get('ev_ebitda_max', 0)
         dcf_min = ff.get('dcf_min', 0)
         dcf_max = ff.get('dcf_max', 0)
-        if ev_max and dcf_max:
-            md.append(f"\n| Phương pháp | Dải Giá trị (tỷ VND) |")
-            md.append(f"|---|---|")
-            md.append(f"| EV/EBITDA (±1σ) | {ev_min/1e9:,.0f} – {ev_max/1e9:,.0f} |")
-            md.append(f"| DCF TV Integration | {dcf_min/1e9:,.0f} – {dcf_max/1e9:,.0f} |")
-            md.append(f"| **EV hiện tại** | **{current_ev/1e9:,.0f}** |")
+        
+        p_ev_min = ff.get('price_ebitda_min', 0)
+        p_ev_max = ff.get('price_ebitda_max', 0)
+        p_dcf_min = ff.get('price_dcf_min', 0)
+        p_dcf_max = ff.get('price_dcf_max', 0)
+        p_curr = ff.get('price_current', 0)
+
+        if ev_max or dcf_max:
+            md.append(f"\n| Phương pháp | Định giá EV (tỷ VND) | Giá mục tiêu (VND/cp) |")
+            md.append(f"|---|---|---|")
+            md.append(f"| EV/EBITDA (±1σ) | {ev_min/1e9:,.0f} – {ev_max/1e9:,.0f} | **{p_ev_min:,.0f} – {p_ev_max:,.0f}** |")
+            md.append(f"| DCF TV Integration | {dcf_min/1e9:,.0f} – {dcf_max/1e9:,.0f} | **{p_dcf_min:,.0f} – {p_dcf_max:,.0f}** |")
+            md.append(f"| **Thị giá & EV hiện tại** | **{current_ev/1e9:,.0f}** | **{p_curr:,.0f}** |")
+            
+            md.append(f"\n> [!TIP]\n> **Lưu ý:** Định giá EV/EBITDA đã được áp dụng mức chiết khấu rủi ro tái cấu trúc để phản ánh gánh nặng nợ vay hiện tại của HVN.")
 
         # ── PHẦN 4: HIỆU QUẢ HOẠT ĐỘNG ──
         md.append("\n## 4. HIỆU QUẢ HOẠT ĐỘNG & BIÊN LỢI NHUẬN")
