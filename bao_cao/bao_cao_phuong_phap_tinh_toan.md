@@ -122,6 +122,7 @@ Xác định vùng giá trị "Rẻ - Đắt" của HVN dựa trên phân phối
 Mô hình chiết khấu dòng tiền kết hợp Terminal Value:
 *   **Giai đoạn 1 (5 năm):** Dự phóng FCFF dựa trên tốc độ tăng trưởng giả định.
 *   **Giai đoạn 2 (Terminal Value):** Tính dựa trên `EBITDA_n * Mean(EV/EBITDA)`.
+    *   *Lưu ý:* Hệ số Bội số mục tiêu (Terminal Multiple) được tính toán **tự động**, là giá trị trung bình lịch sử của EV/EBITDA (chỉ lấy các năm có EV/EBITDA dương, loại bỏ các năm khủng hoảng) nhằm mang lại tính co giãn linh hoạt và khách quan cho ma trận kết quả định giá.
 *   **Công thức tổng quát:**
     $$EV = \sum_{t=1}^{5} \frac{FCFF_{base} \times (1+g)^t}{(1+WACC)^t} + \frac{EBITDA_{base} \times (1+g)^5 \times Multiplier_{hist}}{(1+WACC)^5}$$
 *   **Sensitivity Matrix:** Ma trận giá trị doanh nghiệp tương ứng với các cặp (WACC, g).
@@ -158,7 +159,11 @@ Hệ thống thực hiện phép tính quy đổi ngược từ Giá trị Doanh
 
 > [!IMPORTANT]
 > **Xử lý dữ liệu nhiễu (Dữ liệu HVN):** 
-> Trong giai đoạn khủng hoảng (2020-2022), HVN có EBITDA âm dẫn đến các hệ số EV/EBITDA lịch sử bị âm hoặc cực kỳ thấp. Để đảm bảo dải định giá có ý nghĩa kinh tế, hệ thống loại bỏ các giá trị EV/EBITDA $\leq 0$ khỏi tập dữ liệu tính toán Mean và StdDev.
+> Trong giai đoạn khủng hoảng (2020-2022), HVN có EBITDA âm hoặc Vốn chủ sở hữu âm dẫn đến các hệ số EV/EBITDA lịch sử bị bóp méo, mất ý nghĩa. 
+> Để đảm bảo Dải định giá (Valuation Bands) và Football Field Chart phản ánh đúng thực tế tương lai của doanh nghiệp bình thường, hệ thống đã cấu hình bộ lọc hai tầng: 
+> 1) Loại bỏ các giá trị $EV/EBITDA \leq 0$.
+> 2) Loại bỏ triệt để các năm có $VCSH \leq 0$.
+> Các tập dữ liệu vi phạm bị loại bỏ hoàn toàn khỏi mẫu thống kê tính toán Mean và StdDev.
 
 ---
 
