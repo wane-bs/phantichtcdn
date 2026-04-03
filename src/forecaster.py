@@ -165,9 +165,10 @@ class Forecaster:
         """
         Tính dải định giá lịch sử dựa trên phân phối của EV/EBITDA.
         Band = mean ± 1σ, ±2σ
-        Lưu ý: Loại bỏ các giá trị âm (do EBITDA âm) để có mean có ý nghĩa.
+        Lưu ý: Loại bỏ các giá trị âm (do EBITDA âm) và loại bỏ những năm Vốn chủ sở hữu âm.
         """
         fi = self.dfs.get('FINANCIAL INDEX')
+        bs = self.dfs.get('BALANCE SHEET')
         if fi is None:
             return None
 
@@ -177,8 +178,17 @@ class Forecaster:
             return None
             
         series = row[years].astype(float)
-        # Chỉ lấy các giá trị dương (> 0) để tính toán dải định giá
+        # Bắt đầu với các năm có EV/EBITDA dương
         vals = series[series > 0].dropna()
+        
+        # Lọc bỏ những năm Vốn chủ sở hữu âm
+        if bs is not None:
+            vcsh_row = self._get_row(bs, r'^VỐN CHỦ SỞ HỮU$')
+            if vcsh_row is not None:
+                vcsh_series = vcsh_row[years].astype(float)
+                positive_vcsh_years = vcsh_series[vcsh_series > 0].index
+                vals = vals[vals.index.isin(positive_vcsh_years)]
+                
         if len(vals) < 2:
             return None
 
@@ -241,18 +251,8 @@ class Forecaster:
                 ebitda_base = 2000.0
                 
         if ev_ebitda_multiple is None:
-            if fi is not None:
-                ev_ebitda_row = self._get_row(fi, r'^EV/EBITDA$')
-                if ev_ebitda_row is not None:
-                    years = self._get_years(fi)
-                    # Lấy mean của các EV/EBITDA dương (Loại bỏ các năm crisis)
-                    hist_multiples = ev_ebitda_row[years].astype(float)
-                    ev_ebitda_multiple = float(hist_multiples[hist_multiples > 0].mean())
-                    if pd.isna(ev_ebitda_multiple): ev_ebitda_multiple = 8.0
-                else:
-                    ev_ebitda_multiple = 8.0
-            else:
-                ev_ebitda_multiple = 8.0
+            # Theo yêu cầu, cấu hình cứng Bội số mục tiêu DCF Terminal là 12.2x
+            ev_ebitda_multiple = 12.2
 
         wacc_vals = np.arange(wacc_range[0], wacc_range[1] + wacc_range[2] / 2, wacc_range[2])
         g_vals = np.arange(ebitda_growth_range[0], ebitda_growth_range[1] + ebitda_growth_range[2] / 2, ebitda_growth_range[2])
