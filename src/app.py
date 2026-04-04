@@ -741,6 +741,120 @@ def main():
                         unsafe_allow_html=True
                     )
 
+                # ── MA TRẬN DỊCH CHUYỂN ĐIỂM HÒA VỐN & DOL (MACRO SENSITIVITY) ──
+                st.markdown("<br><br>", unsafe_allow_html=True)
+                st.subheader("Ma trận Nhạy cảm: Dịch chuyển Điểm hòa vốn & Đòn bẩy Hoạt động")
+                st.markdown("Mô phỏng tác động của Biến số Vĩ mô (Giá dầu & Tỷ giá) lên Cấu trúc chi phí doanh nghiệp.<br>"
+                            "<span style='color: #888888; font-size: 0.9em;'>"
+                            "<b>Trạng thái Mỏ neo (Base 2025):</b> Điểm hòa vốn cốt lõi ~72.519 tỷ VND | Giá Jet A1 gốc ~100 USD/thùng | Tỷ giá gốc ~25.400 VND/USD.<br>"
+                            "<b>Hệ số đòn bẩy rủi ro:</b> +1 USD Jet A1 $\\rightarrow$ +452.4 tỷ VND Biến phí | +1% Tỷ giá $\\rightarrow$ +533 tỷ VND Định phí.</span>",
+                            unsafe_allow_html=True)
+
+                # Layout controls
+                c_oil, c_fx = st.columns(2)
+                with c_oil:
+                    delta_oil = st.slider("Cú sốc: Giá nhiên liệu Jet A1 (USD/thùng)", min_value=-20.0, max_value=50.0, value=0.0, step=1.0)
+                with c_fx:
+                    delta_fx = st.slider("Cú sốc: Tỷ giá USD/VND (%)", min_value=-10.0, max_value=10.0, value=0.0, step=0.5)
+
+                if ebit_margin_pct is not None:
+                    # 1. Base State (2025 normalized)
+                    base_r = latest_r  # from above (~121,213)
+                    base_f = latest_f
+                    base_vc = latest_vc
+                    base_v_ratio = latest_v_ratio
+                    base_bep = base_f / (1 - base_v_ratio) if (1 - base_v_ratio) > 0 else float('inf')
+                    base_ebit = base_r - base_vc - base_f
+                    base_dol = (base_r * (1 - base_v_ratio)) / base_ebit if base_ebit != 0 else float('nan')
+
+                    # 2. Shock State
+                    # As per user's table: 1 USD Jet A1 -> 452.4 tỷ cost increase (Variable Cost)
+                    # 1% FX -> 533 tỷ cost increase (Fixed Cost / Leases)
+                    shock_vc = delta_oil * 452.4 / 1000  # Convert to nghìn tỷ
+                    shock_fc = delta_fx * 533.0 / 1000   # Convert to nghìn tỷ
+
+                    new_vc = base_vc + shock_vc
+                    new_f = base_f + shock_fc
+                    new_v_ratio = new_vc / base_r if base_r > 0 else 0
+
+                    if new_v_ratio >= 1:
+                        new_bep = float('inf') # Margin is negative, cannot break even
+                        new_dol = float('nan')
+                        new_ebit = base_r - new_vc - new_f
+                    else:
+                        new_bep = new_f / (1 - new_v_ratio)
+                        new_ebit = base_r - new_vc - new_f
+                        new_dol = (base_r * (1 - new_v_ratio)) / new_ebit if new_ebit != 0 else float('nan')
+
+                    # 3. Hiển thị Metrics Delta
+                    st.markdown("##### Phân tích Tác động (So với Trạng thái Dự phóng 2025)")
+                    m1, m2, m3 = st.columns(3)
+                    
+                    diff_ebit = new_ebit - base_ebit
+                    m1.metric("Lợi nhuận EBIT mới (tỷ VND)", f"{new_ebit * 1000:,.0f}", f"{diff_ebit * 1000:,.0f}" if diff_ebit != 0 else "0")
+
+                    if np.isinf(new_bep):
+                        m2.metric("Điểm hòa vốn mới (tỷ VND)", "Vô cực (Vỡ trận)", "Không thể hòa vốn", delta_color="inverse")
+                    else:
+                        diff_bep = new_bep - base_bep
+                        m2.metric("Điểm hòa vốn mới (tỷ VND)", f"{new_bep * 1000:,.0f}", f"{diff_bep * 1000:,.0f}" if diff_bep != 0 else "0", delta_color="inverse")
+
+                    if np.isnan(new_dol):
+                        m3.metric("Đòn bẩy Hoạt động (DOL)", "Lỗ cốt lõi", delta_color="off")
+                    else:
+                        diff_dol = new_dol - base_dol
+                        m3.metric("Hệ số DOL hiện hành", f"{new_dol:.2f}x", f"{diff_dol:+.2f}x" if diff_dol != 0 else "0.00x", delta_color="inverse")
+
+                    # 4. Trực quan hóa Biểu đồ Sốc (Dual Curve)
+                    fig_shock = go.Figure()
+
+                    # Curve Base
+                    theo_r_shock = np.linspace(10, 160, 100)
+                    theo_margin_base = ((1 - base_v_ratio) - (base_f / theo_r_shock)) * 100
+                    fig_shock.add_trace(go.Scatter(
+                        x=theo_r_shock, y=theo_margin_base,
+                        mode='lines', name='Cơ sở (Base)',
+                        line=dict(color='rgba(255, 255, 255, 0.4)', width=3, dash='dot'),
+                        hoverinfo='skip'
+                    ))
+
+                    # Curve Shock
+                    if new_v_ratio < 1 and (delta_oil != 0 or delta_fx != 0):
+                        theo_margin_shock = ((1 - new_v_ratio) - (new_f / theo_r_shock)) * 100
+                        color_shock = COLORS['red'] if (new_ebit < base_ebit) else COLORS['green']
+                        
+                        fig_shock.add_trace(go.Scatter(
+                            x=theo_r_shock, y=theo_margin_shock,
+                            mode='lines', name='Sau Cú Sốc (Stressed)',
+                            line=dict(color=color_shock, width=4)
+                        ))
+                        
+                        # Shifted BEP line
+                        fig_shock.add_vline(x=new_bep, line_dash='dash', line_color=color_shock)
+                        fig_shock.add_annotation(x=new_bep, y=0, text=f'BEP Mới: {new_bep:.0f}k', showarrow=False, yshift=-15, font=dict(color=color_shock))
+                    
+                    # Highlight 2025 point Base vs New
+                    b_margin = base_ebit/base_r*100
+                    n_margin = new_ebit/base_r*100
+                    
+                    if np.isfinite(b_margin) and np.isfinite(n_margin):
+                        fig_shock.add_trace(go.Scatter(
+                            x=[base_r, base_r], y=[b_margin, n_margin],
+                            mode='markers+lines', name='Dịch chuyển Lợi nhuận',
+                            marker=dict(color=['white', COLORS['orange']], size=12, symbol=['circle', 'circle-open']),
+                            line=dict(color=COLORS['orange'], width=2, dash='dot')
+                        ))
+
+                    fig_shock.update_layout(
+                        title='Ma trận Dịch chuyển Trần Lợi nhuận & Điểm hòa vốn',
+                        xaxis_title='Doanh thu Tuyệt đối (nghìn tỷ VND)',
+                        yaxis_title='Biên EBIT (%)',
+                        **DARK_TEMPLATE,
+                        hovermode='closest',
+                        height=400,
+                        margin=dict(t=50, b=30)
+                    )
+                    st.plotly_chart(fig_shock, use_container_width=True)
 
     # ═══════════════════════════════════════════════════════════════════════
     # Tiếp tục TAB 4

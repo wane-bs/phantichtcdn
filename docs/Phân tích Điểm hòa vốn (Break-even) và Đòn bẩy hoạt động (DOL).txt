@@ -1,0 +1,19 @@
+# PHÂN TÍCH ĐIỂM HÒA VỐN (BREAK-EVEN) VÀ ĐÒN BẨY HOẠT ĐỘNG (DOL) - CẬP NHẬT 2025
+
+## 1. Bản chất Động của Điểm hòa vốn (Dynamic BEP)
+Thay vì một ngưỡng cố định, Điểm hòa vốn của HVN biến thiên mạnh mẽ theo cấu trúc chi phí (Giá dầu & Tỷ giá). 
+- **Giai đoạn rủi ro (2023):** Với biên đóng góp mỏng (Tỷ lệ biến phí v = 89.2%), điểm hòa vốn bị đẩy lên tận ~115.000 tỷ VND, khiến doanh nghiệp lỗ sâu dù doanh thu đã đạt 91k tỷ.
+- **Giai đoạn bứt phá (2024):** Khi hiệu suất vận hành cải thiện, tỷ lệ biến phí giảm xuống ~82.1%, điểm hòa vốn "rơi" xuống mức ~68.000 tỷ VND. Với doanh thu thực tế 106k tỷ, HVN đã chính thức vượt xa ngưỡng hòa vốn toàn diện từ năm này.
+- **Giai đoạn bão hòa (2025):** Dự báo điểm hòa vốn thực tế nằm quanh mốc ~73.000 tỷ VND. Việc duy trì khoảng cách an toàn (Margin of Safety) rộng so với mức doanh thu dự phóng 121k tỷ là nền tảng bảo vệ lợi nhuận ròng.
+
+## 2. Hiệu ứng Đòn bẩy Hoạt động (DOL) - Từ Khuếch đại đến Tiệm cận
+DOL là "con dao hai lưỡi" và có đặc tính thay đổi phi tuyến tính theo quy mô:
+- **Hiệu ứng Nhảy vọt (Crossover):** Tại ngưỡng doanh thu tiệm cận hòa vốn (~70k-80k tỷ), hệ số DOL đạt giá trị cực đại. Đây là lý do tại sao năm 2024, EBIT bùng nổ từ con số âm lên dương 6.813 tỷ VND (Hệ số DOL ghi nhận bứt phá 23.1x).
+- **Hiệu ứng Tiệm cận (Asymptotic Limit):** Khi doanh thu đạt mức khổng lồ (2025: >121k tỷ), DOL có xu hướng hội tụ dần về mức 1.0. Lúc này, lợi nhuận không còn tăng theo cấp số nhân mà tăng dần theo quy mô. Biên EBIT sẽ bị "chặn trên" bởi giới hạn toán học của cấu trúc biến phí (Limit Ceiling ~18-19%), không thể tăng vô hạn dù doanh thu tiếp tục bơm thêm.
+
+## 3. Phân rã lợi nhuận và Rủi ro Hệ thống
+Cần tách biệt Lợi nhuận vận hành cốt lõi (EBIT) và các yếu tố kế toán (Pacific Airlines):
+- **EBIT thực chất:** Phản ánh hiệu quả thực từ việc "pha loãng" định phí (Khấu hao, Thuê tàu bay, SG&A) trên một nền doanh thu lớn. Năm 2025, HVN dự kiến bỏ túi thêm ~2.400 tỷ VND EBIT tăng thêm hoàn toàn nhờ nội lực.
+- **Rủi ro Delta:** Mô hình "Asset-light" khiến HVN cực kỳ nhạy cảm với các biến số đầu vào. Chỉ cần một cú sốc giá dầu hoặc tỷ giá đẩy tỷ lệ biến phí tăng ngược lại lên mức ~90%, điểm hòa vốn sẽ ngay lập tức "vọt" lên trên ngưỡng 120.000 tỷ, triệt tiêu ngay lập tức toàn bộ thành quả lợi nhuận.
+
+**Kết luận:** Đòn bẩy hoạt động của HVN đã chuyển trạng thái từ giai đoạn "Đấu tranh Hòa vốn" (2021-2023) sang giai đoạn "Tối ưu hóa quy mô" (2024-2025). Trọng tâm chiến lược hiện nay không còn là kỳ vọng bứt phá biên lợi nhuận cấp số nhân (vốn đã chạm trần cấu trúc) mà là bảo vệ quy mô doanh thu để duy trì khoảng cách an toàn so với điểm hòa vốn động.
