@@ -580,21 +580,26 @@ def main():
                     except Exception:
                         dol_labels.append('')
 
-                # Biên EBIT % (từ IS_VERTICAL, đã là %)
-                ebit_margin_pct = get_row_data(is_vert, r'^EBIT$')
-                em_list = None
-                if ebit_margin_pct is not None:
-                    em_list = [float(ebit_margin_pct.get(y, np.nan)) for y in years]
+                # Tốc độ tăng trưởng EBIT YoY (%)
+                ebit_growth_list = [np.nan]
+                for i in range(1, len(years)):
+                    prev_e = ebit_list[i-1]
+                    curr_e = ebit_list[i]
+                    if prev_e != 0:
+                        g = (curr_e - prev_e) / abs(prev_e) * 100
+                        ebit_growth_list.append(g)
+                    else:
+                        ebit_growth_list.append(np.nan)
 
                 # Vẽ chart với layout type='category' từ đầu
                 fig_ol = go.Figure(
                     layout=go.Layout(
-                        title='Đòn bẩy Hoạt động — Khi DT vượt Break-even, Biên EBIT tăng theo cấp số nhân',
+                        title='Đòn bẩy Hoạt động — Khi DT vượt Break-even, EBIT tăng trưởng theo cấp số nhân',
                         barmode='overlay',
                         **DARK_TEMPLATE,
                         xaxis=dict(type='category', tickangle=-30),
                         yaxis=dict(title='Nghìn tỷ VND', side='left'),
-                        yaxis2=dict(title='Biên EBIT (%)', side='right',
+                        yaxis2=dict(title='Tăng trưởng EBIT (%)', side='right',
                                     overlaying='y', showgrid=False, ticksuffix='%'),
                         legend=dict(orientation='h', y=-0.22, font=dict(size=10)),
                         height=480,
@@ -611,14 +616,13 @@ def main():
                     name='Định phí ước tính (nghìn tỷ VND)',
                     marker_color='rgba(233,69,96,0.6)',
                 ))
-                if em_list is not None:
-                    fig_ol.add_trace(go.Scatter(
-                        x=ol_x, y=em_list,
-                        name='Biên EBIT (%)',
-                        mode='lines+markers',
-                        line=dict(color=COLORS['yellow'], width=3),
-                        marker=dict(size=9), yaxis='y2'
-                    ))
+                fig_ol.add_trace(go.Scatter(
+                    x=ol_x, y=ebit_growth_list,
+                    name='Tăng trưởng EBIT (%)',
+                    mode='lines+markers',
+                    line=dict(color=COLORS['yellow'], width=3),
+                    marker=dict(size=9), yaxis='y2'
+                ))
 
                 # Break-even line
                 fig_ol.add_shape(type='line', x0=-0.5, x1=len(ol_x)-0.5,
@@ -644,13 +648,114 @@ def main():
                 st.markdown(
                     '<div class="info-box">'
                     '<b>Đòn bẩy Hoạt động (DOL)</b> = %ΔEBIT / %ΔDoanh thu. '
-                    'DOL cao → Mỗi 1% tăng doanh thu tạo ra nhiều hơn 1% tăng lợi nhuận. '
+                    'DOL cao → Mỗi 1% tăng doanh thu tạo ra nhiều hơn 1% tăng lợi nhuận. <br>'
                     '<b>Cột xanh</b> = Doanh thu. <b>Cột đỏ</b> = Định phí (Khấu hao + SG&A). '
-                    '<b>Đường vàng</b> = Biên EBIT (trục phải). '
+                    '<b>Đường vàng</b> = Tăng trưởng EBIT YoY (%), trục phải. '
                     '<b>Đường lam</b> = Ngưỡng doanh thu hòa vốn ~121,000 tỷ VND.'
                     '</div>',
                     unsafe_allow_html=True
                 )
+
+                # ── BIỂU ĐỒ SCATTER ĐƯỜNG CONG TIỆM CẬN (ASYMPTOTIC CURVE) ──
+                st.subheader("Trực quan hóa Toán học: Đường cong Tiệm cận (Asymptotic Margin Curve)")
+
+                # Lấy dữ liệu margin thực tế
+                ebit_margin_pct = get_row_data(is_vert, r'^EBIT$')
+                if ebit_margin_pct is not None:
+                    scatter_margins = [float(ebit_margin_pct.get(y, np.nan)) for y in years]
+                    scatter_revs = [float(revenue[y])/SCALE for y in years]
+
+                    # Tính toán đường cong lý thuyết dựa trên dữ liệu năm mới nhất (hoặc trung bình)
+                    # Phương trình: Margin = (1 - v) - F/R
+                    # Ta lấy năm cuối cùng (2025 hoặc 2024 có dữ liệu dương) để làm hệ số đại diện
+                    latest_r = float(revenue[years[-1]])/SCALE
+                    latest_f = fc_list[-1]/SCALE
+                    latest_e = ebit_list[-1]/SCALE
+                    # Biên gộp = Lãi gộp / DT. Nhưng ta cần biến phí (v).
+                    # EBIT = Doanh thu - Biến phí - Định phí => Biến phí = Doanh thu - EBIT - Định phí
+                    latest_vc = latest_r - latest_e - latest_f
+                    latest_v_ratio = latest_vc / latest_r if latest_r > 0 else 0.85 # fallback
+
+                    # Mảng giả lập doanh thu R từ 10k đến 160k
+                    theo_r = np.linspace(10, 160, 100)
+                    theo_margin = ((1 - latest_v_ratio) - (latest_f / theo_r)) * 100
+
+                    fig_scatter = go.Figure()
+                    
+                    # 1. Đường cong lý thuyết
+                    fig_scatter.add_trace(go.Scatter(
+                        x=theo_r, y=theo_margin,
+                        mode='lines',
+                        name='Đường cong Cấu trúc (Lý thuyết)',
+                        line=dict(color='rgba(255, 255, 255, 0.4)', width=3, dash='dot'),
+                        hoverinfo='skip'
+                    ))
+
+                    # 2. Trần tiệm cận (Limit)
+                    asym_limit = (1 - latest_v_ratio) * 100
+                    fig_scatter.add_hline(
+                        y=asym_limit, 
+                        line_dash='dash', line_color=COLORS['cyan'],
+                        annotation_text=f'Giới hạn trần tiệm cận: {asym_limit:.1f}%', 
+                        annotation_position='bottom right',
+                        annotation_font=dict(color=COLORS['cyan'])
+                    )
+
+                    # 3. Trục Break-even (Doanh thu hòa vốn)
+                    # F / (1 - v)
+                    theo_be = latest_f / (1 - latest_v_ratio) if (1 - latest_v_ratio) > 0 else 121.0
+                    fig_scatter.add_vline(
+                        x=theo_be,
+                        line_dash='dash', line_color=COLORS['red'],
+                        annotation_text=f'Break-even {theo_be:.0f}k tỷ',
+                        annotation_position='top left',
+                        annotation_font=dict(color=COLORS['red'])
+                    )
+
+                    # 4. Vẽ đường nối các năm để thấy quỹ đạo
+                    fig_scatter.add_trace(go.Scatter(
+                        x=scatter_revs, y=scatter_margins,
+                        mode='lines',
+                        name='Quỹ đạo (Trajectory)',
+                        line=dict(color='rgba(255, 255, 0, 0.3)', width=1, dash='solid'),
+                        hoverinfo='skip'
+                    ))
+
+                    # 5. Dữ liệu thực tế các năm
+                    fig_scatter.add_trace(go.Scatter(
+                        x=scatter_revs, y=scatter_margins,
+                        mode='markers+text',
+                        name='Thực tế qua các năm',
+                        marker=dict(
+                            color=[COLORS['green'] if m >= 0 else COLORS['red'] for m in scatter_margins],
+                            size=10, line=dict(color='white', width=1)
+                        ),
+                        text=[str(y) for y in years],
+                        textposition='top center',
+                        textfont=dict(size=9, color='white')
+                    ))
+
+                    fig_scatter.update_layout(
+                        title='Tương quan Doanh thu & Biên EBIT (Hàm Tiệm cận)',
+                        xaxis_title='Doanh thu Tuyệt đối (nghìn tỷ VND)',
+                        yaxis_title='Biên EBIT (%)',
+                        **DARK_TEMPLATE,
+                        hovermode='closest',
+                        legend=dict(orientation='h', y=-0.2),
+                        height=500
+                    )
+                    
+                    st.plotly_chart(fig_scatter, use_container_width=True)
+                    st.markdown(
+                        '<div class="info-box">'
+                        '<b>Hàm số: Biên EBIT = (1 - Tỷ lệ Biến phí) - (Định phí / Doanh thu)</b><br>'
+                        'Biểu đồ này giải thích trực quan bản chất Đòn bẩy Hoạt động: Khi sản lượng nhỏ, gánh nặng Định phí (Khấu hao, thuê máy bay) khổng lồ kéo biên lợi nhuận xuống vực sâu. '
+                        'Khi thoát khỏi điểm hòa vốn (đường đỏ), mọi đồng doanh thu vọt thẳng xuống lợi nhuận với phương thẳng đứng.<br>'
+                        '<b>Nhưng khi doanh thu đã quá lớn (2025), sự gia tăng bị bão hòa. Đường thẳng bẻ cong nằm ngang và tiến sát vào Giới hạn Trần (Đường lam). Tức là không thể nâng Biên EBIT mãi mãi bằng cách bơm thêm doanh thu.</b>'
+                        '</div>',
+                        unsafe_allow_html=True
+                    )
+
 
     # ═══════════════════════════════════════════════════════════════════════
     # Tiếp tục TAB 4

@@ -92,6 +92,33 @@ Phân tích mối quan hệ giữa doanh thu, cấu trúc chi phí và lợi nhu
 | **Điểm hòa vốn (BEP)** | $FC / (CM / Doanh\ thu\ thuần)$ | Tính toán |
 | **DOL** | $\% \Delta EBIT / \% \Delta Doanh\ thu$ | `IS` |
 
+### 7.1. Bản chất Toán học của Đòn bẩy & Biên EBIT
+Để giải thích tại sao lợi nhuận không tăng vọt vô hạn và DOL biến động mạnh, hệ thống áp dụng các mô hình hàm số sau:
+
+#### A. Hàm Tiệm cận của Biên EBIT
+Phương trình mô phỏng biên lợi nhuận hoạt động:
+$$EBIT\ Margin = (1 - v) - \frac{F}{R}$$
+*Trong đó:* $v$ là tỷ lệ biến phí biên, $F$ là định phí, $R$ là doanh thu.
+
+*   **Giai đoạn hòa vốn:** Khi $R$ tăng nhẹ thoát khỏi điểm hòa vốn, giá trị $\frac{F}{R}$ giảm nhanh, khiến Biên EBIT bứt phá mạnh từ số 0.
+*   **Giai đoạn bão hòa:** Khi $R$ tiến ra rất xa điểm hòa vốn (ví dụ dự phóng 2025), phân số $\frac{F}{R}$ tiến dần về 0. Lúc này, Biên EBIT sẽ **tiệm cận kịch kim** về mức $(1 - v)$. Đây là lý do tại sao sau khi vượt ngưỡng hòa vốn, tốc độ tăng của biên lợi nhuận sẽ phẳng dần theo đường cong logarit.
+
+#### B. Sự hội tụ của hệ số DOL
+Công thức DOL dưới dạng hàm phân thức:
+$$DOL = \frac{1}{1 - \frac{F}{R(1-v)}}$$
+
+*   **Tại điểm hòa vốn ($EBIT \approx 0$):** Mẫu số tiến về 0, khiến **DOL tiến về vô cực (+∞)**. Đây là lý do năm 2024 HVN có DOL cực cao (23.1x).
+*   **Khi doanh thu rất lớn:** Cụm $\frac{F}{R(1-v)}$ tiến về 0, dẫn đến **DOL tiến dần về 1.0**.
+*   **Ý nghĩa:** Khi doanh nghiệp cực kỳ có lãi, đòn bẩy hoạt động sẽ mất dần tác dụng khuếch đại (bão hòa), và mỗi 1% doanh thu tăng thêm sẽ chỉ mang lại xấp xỉ 1% lợi nhuận tăng thêm.
+
+#### C. Biến động DOL âm
+DOL âm xảy ra khi tử số ($\% \Delta EBIT$) và mẫu số ($\% \Delta Doanh\ thu$) ngược chiều:
+*   **Trường hợp 2015 (DOL -6.1x):** Doanh thu giảm nhưng EBIT tăng mạnh nhờ biến phí (giá dầu) giảm sâu.
+*   **Trường hợp 2019 (DOL -16.7x):** Doanh thu tăng nhưng EBIT giảm mạnh do cạnh tranh làm giảm Yield (giá vé) hoặc chi phí cấu trúc tăng nhanh hơn doanh thu.
+
+---
+
+
 > [!IMPORTANT]
 > **Lưu ý về Doanh thu:** Hệ thống phân biệt rõ:
 > - **Doanh thu thuần (~106 nghìn tỷ năm 2024):** Dùng để tính DOL và biên lợi nhuận cốt lõi.
@@ -227,8 +254,9 @@ Trọng tâm: Đánh giá biên lợi nhuận ròng, mô hình chi phí và cơ 
 
 1. **Đòn bẩy Hoạt động (Operating Leverage & Margin Gap)**
    - **Khoảng hở hòa vốn (Filled Area Chart):** $Doanh\ thu\ thuần - |Giá\ vốn| = Lãi\ gộp$. Diện tích được tô màu biểu thị phần đệm lợi nhuận.
-   - **Đòn bẩy Hoạt động (Combo Bar-Line, Scatter threshold):** Kết hợp cột doanh thu, cột định phí, biên EBIT bằng đường nét kẻ.
+   - **Đòn bẩy Hoạt động (Combo Bar-Line, Scatter threshold):** Kết hợp cột doanh thu, cột định phí, và tốc độ tăng trưởng EBIT YoY bằng đường nét kẻ.
      - **Định phí phân bổ (FC):** $\approx Khấu\ hao\ TSCĐ + Chi\ phí\ bán\ hàng + Chi\ phí\ quản\ lý$
+     - **Tăng trưởng EBIT YoY (%)**: Thể hiện tỷ lệ gia tăng lợi nhuận hoạt động so với năm trước. Điểm nhảy vọt lớn nhất thường nằm ở khoảnh khắc doanh thu vượt điểm hòa vốn.
      - **Cơ chế DOL Index:** $DOL_{n+1} = \frac{\Delta EBIT\%}{\Delta Doanh\ thu\%}$ — Độ nhạy mỗi $1\%$ tăng doanh thu lên $EBIT$.
      - **Điểm hòa vốn lý thuyết (Break-even):** Ngưỡng vạch ngang phân cực $\approx 121,000$ tỷ (Doanh thu yêu cầu vượt rào để có EBIT dương).
 2. **Khả năng Sinh lời & P/E, P/B (Multi-line Chart)**
