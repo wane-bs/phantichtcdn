@@ -567,7 +567,7 @@ def main():
                 SCALE = 1e12
                 rev_ntt = [v / SCALE for v in rev_list]
                 fc_ntt  = [v / SCALE for v in fc_list]
-                breakeven_ntt = 121.0  # 121,000 tỷ = 121 nghìn tỷ
+                
 
                 # Tính DOL
                 dol_labels = ['']
@@ -580,27 +580,19 @@ def main():
                     except Exception:
                         dol_labels.append('')
 
-                # Tốc độ tăng trưởng EBIT YoY (%)
-                ebit_growth_list = [np.nan]
-                for i in range(1, len(years)):
-                    prev_e = ebit_list[i-1]
-                    curr_e = ebit_list[i]
-                    if prev_e != 0:
-                        g = (curr_e - prev_e) / abs(prev_e) * 100
-                        ebit_growth_list.append(g)
-                    else:
-                        ebit_growth_list.append(np.nan)
+                # Lợi nhuận EBIT thực tế (tỷ VND)
+                ebit_ty_list = [float(ebit_abs[y])/1e9 for y in years]
 
                 # Vẽ chart với layout type='category' từ đầu
                 fig_ol = go.Figure(
                     layout=go.Layout(
-                        title='Đòn bẩy Hoạt động — Khi DT vượt Break-even, EBIT tăng trưởng theo cấp số nhân',
+                        title='Đòn bẩy Hoạt động — Khi DT vượt Break-even, Lợi nhuận EBIT bứt phá',
                         barmode='overlay',
                         **DARK_TEMPLATE,
                         xaxis=dict(type='category', tickangle=-30),
-                        yaxis=dict(title='Nghìn tỷ VND', side='left'),
-                        yaxis2=dict(title='Tăng trưởng EBIT (%)', side='right',
-                                    overlaying='y', showgrid=False, ticksuffix='%'),
+                        yaxis=dict(title='Nghìn tỷ VND (Doanh thu & Định phí)', side='left'),
+                        yaxis2=dict(title='Lợi nhuận EBIT (tỷ VND)', side='right',
+                                    overlaying='y', showgrid=False),
                         legend=dict(orientation='h', y=-0.22, font=dict(size=10)),
                         height=480,
                     )
@@ -617,20 +609,14 @@ def main():
                     marker_color='rgba(233,69,96,0.6)',
                 ))
                 fig_ol.add_trace(go.Scatter(
-                    x=ol_x, y=ebit_growth_list,
-                    name='Tăng trưởng EBIT (%)',
+                    x=ol_x, y=ebit_ty_list,
+                    name='Lợi nhuận EBIT (tỷ VND)',
                     mode='lines+markers',
                     line=dict(color=COLORS['yellow'], width=3),
                     marker=dict(size=9), yaxis='y2'
                 ))
 
                 # Break-even line
-                fig_ol.add_shape(type='line', x0=-0.5, x1=len(ol_x)-0.5,
-                    y0=breakeven_ntt, y1=breakeven_ntt,
-                    line=dict(color=COLORS['cyan'], width=2, dash='dash'), yref='y')
-                fig_ol.add_annotation(x=ol_x[-1], y=breakeven_ntt, yref='y',
-                    text='Break-even ~121,000 tỷ', showarrow=False,
-                    yshift=10, font=dict(color=COLORS['cyan'], size=11))
 
                 # DOL annotations
                 for i in range(len(ol_x)):
@@ -650,8 +636,7 @@ def main():
                     '<b>Đòn bẩy Hoạt động (DOL)</b> = %ΔEBIT / %ΔDoanh thu. '
                     'DOL cao → Mỗi 1% tăng doanh thu tạo ra nhiều hơn 1% tăng lợi nhuận. <br>'
                     '<b>Cột xanh</b> = Doanh thu. <b>Cột đỏ</b> = Định phí (Khấu hao + SG&A). '
-                    '<b>Đường vàng</b> = Tăng trưởng EBIT YoY (%), trục phải. '
-                    '<b>Đường lam</b> = Ngưỡng doanh thu hòa vốn ~121,000 tỷ VND.'
+                    '<b>Đường vàng</b> = Lợi nhuận EBIT thực tế (tỷ VND), trục phải. '
                     '</div>',
                     unsafe_allow_html=True
                 )

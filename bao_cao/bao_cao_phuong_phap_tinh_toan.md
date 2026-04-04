@@ -254,11 +254,10 @@ Trọng tâm: Đánh giá biên lợi nhuận ròng, mô hình chi phí và cơ 
 
 1. **Đòn bẩy Hoạt động (Operating Leverage & Margin Gap)**
    - **Khoảng hở hòa vốn (Filled Area Chart):** $Doanh\ thu\ thuần - |Giá\ vốn| = Lãi\ gộp$. Diện tích được tô màu biểu thị phần đệm lợi nhuận.
-   - **Đòn bẩy Hoạt động (Combo Bar-Line, Scatter threshold):** Kết hợp cột doanh thu, cột định phí, và tốc độ tăng trưởng EBIT YoY bằng đường nét kẻ.
+   - **Đòn bẩy Hoạt động (Combo Bar-Line, Scatter threshold):** Kết hợp cột doanh thu, cột định phí, và Lợi nhuận EBIT thực tế bằng đường nét kẻ.
      - **Định phí phân bổ (FC):** $\approx Khấu\ hao\ TSCĐ + Chi\ phí\ bán\ hàng + Chi\ phí\ quản\ lý$
-     - **Tăng trưởng EBIT YoY (%)**: Thể hiện tỷ lệ gia tăng lợi nhuận hoạt động so với năm trước. Điểm nhảy vọt lớn nhất thường nằm ở khoảnh khắc doanh thu vượt điểm hòa vốn.
+     - **Lợi nhuận EBIT thực tế (tỷ VND)**: Thể hiện số tiền lợi nhuận cốt lõi kiếm được. Điểm bứt phá mạnh nhất về giá trị tuyệt đối nằm ở khoảnh khắc doanh thu vượt điểm hòa vốn.
      - **Cơ chế DOL Index:** $DOL_{n+1} = \frac{\Delta EBIT\%}{\Delta Doanh\ thu\%}$ — Độ nhạy mỗi $1\%$ tăng doanh thu lên $EBIT$.
-     - **Điểm hòa vốn lý thuyết (Break-even):** Ngưỡng vạch ngang phân cực $\approx 121,000$ tỷ (Doanh thu yêu cầu vượt rào để có EBIT dương).
 2. **Khả năng Sinh lời & P/E, P/B (Multi-line Chart)**
    - Đường khuynh hướng thể hiện Tỷ suất Biên, kèm mốc hình chữ nhật khối cho vùng kháng cự $EV/EBITDA$ hoặc $EV/Revenue$.
 3. **Phân rã Biên lợi nhuận cấu trúc (DuPont Subplots / Secondary Y-Axis)**
