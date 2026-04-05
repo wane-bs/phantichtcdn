@@ -43,6 +43,23 @@ def run_pipeline():
     calc.save_outputs("output/2_calculated")
     print(f"Hoàn thành Stage 2 ({time.time()-start:.2f}s)")
     
+    # STAGE 2.5
+    print("\n[Stage 2.5] Diagnostics - Kiểm định Thống kê Toàn diện")
+    start = time.time()
+    try:
+        from diagnostics import DiagnosticsEngine
+        diag = DiagnosticsEngine(calc.dfs)
+        diag.run_all()
+        diag.save_outputs("output/2.5_diagnostics")
+        # Inject kết quả kiểm định vào dfs để Dashboard có thể đọc
+        for key, val in diag.results.items():
+            calc.dfs[f'DIAG_{key}'] = val
+        # Lưu lại calculated outputs có thêm diagnostics
+        calc.save_outputs("output/2_calculated")
+        print(f"Hoàn thành Stage 2.5 ({time.time()-start:.2f}s)")
+    except Exception as e:
+        print(f"Lỗi Stage 2.5: {e}")
+
     # STAGE 3
     print("\n[Stage 3] Classifier - Phân loại Mô hình Doanh nghiệp")
     start = time.time()

@@ -174,9 +174,10 @@ def main():
     anomaly_numeric = dfs.get('ANOMALY_NUMERIC', {})
     years = [c for c in bs.columns if c != 'Khoản mục']
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "📊 Cơ cấu Tài chính", "🔍 Chất lượng BCTC", "💡 Kết luận Mẫu hình",
-        "⚡ Hiệu suất Mẫu hình", "🤖 Phân tích Nâng cao", "📁 Bảng dữ liệu", "📄 Báo cáo Tổng hợp"
+        "⚡ Hiệu suất Mẫu hình", "🤖 Phân tích Nâng cao", "📁 Bảng dữ liệu", "📄 Báo cáo Tổng hợp",
+        "🧪 Kiểm định Thống kê"
     ])
     
     bm_data = dfs.get('BUSINESS_MODEL', {})
@@ -1595,6 +1596,593 @@ Phương pháp: <b>EV/EBITDA Mean Reversion</b> + <b>DCF Terminal Value Integrat
             )
         else:
             st.info("Chưa có báo cáo nào. Hãy nhấn **🔄 Tạo lại Báo cáo** hoặc chạy Pipeline ở sidebar để tạo báo cáo tự động.")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # TAB 8: KIỂM ĐỊNH THỐNG KÊ TOÀN DIỆN
+    # ═══════════════════════════════════════════════════════════════════════
+    with tab8:
+        st.header("🧪 Kiểm định Thống kê Toàn diện — Econometric Diagnostics")
+        st.markdown(
+            '<div class="info-box">'
+            '<b>Mục đích:</b> Kiểm tra tính hợp lệ thống kê của toàn bộ mô hình hồi quy Log-Log, '
+            'ma trận nhạy cảm, và cấu trúc dữ liệu đầu vào. '
+            'Bộ kiểm định bao gồm 8 nhóm test kinh tế lượng chuẩn.'
+            '</div>',
+            unsafe_allow_html=True
+        )
+
+        # ── Controls: Alpha level selector ──
+        col_alpha, col_info = st.columns([1, 3])
+        with col_alpha:
+            alpha_choice = st.selectbox(
+                "Mức ý nghĩa α (Significance Level)",
+                options=[0.01, 0.05, 0.10],
+                index=1,
+                format_func=lambda x: f"{x*100:.0f}% ({['Rất nghiêm ngặt', 'Chuẩn', 'Nới lỏng'][{0.01:0, 0.05:1, 0.10:2}[x]]})",
+                key='alpha_selector'
+            )
+        with col_info:
+            st.info(f"🎯 Đang áp dụng mức ý nghĩa **α = {alpha_choice*100:.0f}%** cho tất cả kiểm định. "
+                    f"p-value < {alpha_choice} → Bác bỏ H₀.")
+
+        # ── Load diagnostics data ──
+        # Try loading from pipeline output first, then run on-the-fly
+        diag_data = {}
+        diag_dir = os.path.join(PROJECT_ROOT, "output/2.5_diagnostics")
+        if os.path.exists(diag_dir):
+            import json as _json
+            combined_path = os.path.join(diag_dir, "ALL_DIAGNOSTICS.json")
+            if os.path.exists(combined_path):
+                with open(combined_path, 'r', encoding='utf-8') as _f:
+                    diag_data = _json.load(_f)
+
+        # Fallback: check dfs keys prefixed with DIAG_
+        if not diag_data:
+            for k, v in dfs.items():
+                if k.startswith('DIAG_'):
+                    diag_data[k.replace('DIAG_', '')] = v
+
+        # If still no data, offer to run diagnostics
+        if not diag_data:
+            st.warning("⚠️ Chưa có kết quả kiểm định. Hãy **Chạy Pipeline** ở sidebar hoặc nhấn nút bên dưới.")
+            if st.button("🔬 Chạy Bộ Kiểm định Ngay", use_container_width=True):
+                with st.spinner("Đang chạy 8 nhóm kiểm định..."):
+                    try:
+                        from diagnostics import DiagnosticsEngine
+                        diag_engine = DiagnosticsEngine(dfs, alpha=alpha_choice)
+                        diag_data = diag_engine.run_all(alpha=alpha_choice)
+                        diag_engine.save_outputs(diag_dir)
+                        st.success("✅ Hoàn thành kiểm định!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Lỗi: {e}")
+
+        if diag_data:
+            # ════════════════════════════════════════════════════════════════
+            # PANEL 1: STATIONARITY & COINTEGRATION
+            # ════════════════════════════════════════════════════════════════
+            st.divider()
+            st.subheader("① Kiểm định Tính dừng (ADF) & Đồng liên kết (Engle-Granger)")
+            stat_data = diag_data.get('STATIONARITY', {})
+
+            if 'error' in stat_data:
+                st.warning(f"Không thể chạy: {stat_data['error']}")
+            else:
+                adf_tests = stat_data.get('adf_tests', [])
+                if adf_tests:
+                    # Summary badges
+                    cols_adf = st.columns(len(adf_tests))
+                    for idx, test in enumerate(adf_tests):
+                        with cols_adf[idx]:
+                            series_name = test.get('series', '?')
+                            is_stat = test.get('is_stationary')
+                            p_val = test.get('p_value', 'N/A')
+                            adf_stat = test.get('adf_stat', 'N/A')
+
+                            if is_stat is True:
+                                st.success(f"**{series_name}**\n\n✅ Dừng I(0)\n\nADF = {adf_stat}\n\np = {p_val}")
+                            elif is_stat is False:
+                                diff_stat = test.get('first_diff_stationary')
+                                diff_label = '(Δ dừng)' if diff_stat else '(Δ không dừng)'
+                                st.error(f"**{series_name}**\n\n⚠️ Không dừng I(1) {diff_label}\n\nADF = {adf_stat}\n\np = {p_val}")
+                            else:
+                                st.info(f"**{series_name}**\n\n{test.get('conclusion', 'N/A')}")
+
+                    # Detailed table
+                    with st.expander("📋 Chi tiết ADF Test", expanded=False):
+                        adf_rows = []
+                        for test in adf_tests:
+                            crit = test.get('critical_values', {})
+                            adf_rows.append({
+                                'Chuỗi': test.get('series', ''),
+                                'ADF Stat': test.get('adf_stat', 'N/A'),
+                                'p-value': test.get('p_value', 'N/A'),
+                                'Lag': test.get('used_lag', 'N/A'),
+                                'CV 1%': crit.get('1%', 'N/A'),
+                                'CV 5%': crit.get('5%', 'N/A'),
+                                'CV 10%': crit.get('10%', 'N/A'),
+                                'Kết luận': test.get('conclusion', ''),
+                                'Δ ADF': test.get('first_diff_adf', ''),
+                                'Δ p-value': test.get('first_diff_p', ''),
+                            })
+                        st.dataframe(pd.DataFrame(adf_rows), use_container_width=True)
+
+                # Cointegration results
+                coint_tests = stat_data.get('cointegration', [])
+                if coint_tests:
+                    st.markdown("##### Kiểm định Đồng liên kết Engle-Granger")
+                    for ct in coint_tests:
+                        if 'error' in ct:
+                            st.warning(f"{ct['pair']}: {ct['error']}")
+                        else:
+                            is_coint = ct.get('is_cointegrated', False)
+                            if is_coint:
+                                st.success(f"✅ **{ct['pair']}**: {ct['conclusion']} (p={ct['p_value']})")
+                            else:
+                                st.error(f"⚠️ **{ct['pair']}**: {ct['conclusion']} (p={ct['p_value']})")
+                elif stat_data.get('any_nonstationary'):
+                    st.info("Không đủ dữ liệu để chạy kiểm định đồng liên kết.")
+
+            # ════════════════════════════════════════════════════════════════
+            # PANEL 2: REGRESSION DIAGNOSTICS (BP, DW, JB)
+            # ════════════════════════════════════════════════════════════════
+            st.divider()
+            st.subheader("② Chẩn đoán Hồi quy Log-Log (Trục Regression Diagnostics)")
+            st.markdown(
+                '<div class="info-box">'
+                'Kiểm tra 3 giả định cốt lõi của OLS: '
+                '<b>Phương sai đồng nhất</b> (Breusch-Pagan) · '
+                '<b>Không tự tương quan</b> (Durbin-Watson & Ljung-Box) · '
+                '<b>Phần dư phân phối chuẩn</b> (Jarque-Bera).'
+                '</div>',
+                unsafe_allow_html=True
+            )
+
+            col_bp, col_dw, col_jb = st.columns(3)
+
+            # Breusch-Pagan
+            with col_bp:
+                het_data = diag_data.get('HETEROSKEDASTICITY', {})
+                if 'error' in het_data:
+                    st.warning(f"BP: {het_data['error']}")
+                else:
+                    bp_pass = het_data.get('is_homoskedastic', False)
+                    bp_p = het_data.get('lm_p_value', 'N/A')
+                    bp_stat = het_data.get('lm_statistic', 'N/A')
+
+                    fig_bp = go.Figure(go.Indicator(
+                        mode='gauge+number',
+                        value=bp_p if isinstance(bp_p, (int, float)) else 0,
+                        title={'text': 'Breusch-Pagan'},
+                        number={'suffix': '', 'valueformat': '.4f'},
+                        gauge=dict(
+                            axis=dict(range=[0, 1]),
+                            bar=dict(color=COLORS['green'] if bp_pass else COLORS['red']),
+                            threshold=dict(line=dict(color='white', width=3), thickness=0.8, value=alpha_choice),
+                            steps=[
+                                dict(range=[0, alpha_choice], color='rgba(233,69,96,0.3)'),
+                                dict(range=[alpha_choice, 1], color='rgba(43,147,72,0.3)'),
+                            ],
+                        ),
+                    ))
+                    badge = '✅ PASS' if bp_pass else '⚠️ FAIL'
+                    fig_bp.update_layout(
+                        height=220, **DARK_TEMPLATE,
+                        annotations=[dict(text=badge, x=0.5, y=-0.05, showarrow=False,
+                                         font=dict(size=14, color=COLORS['green'] if bp_pass else COLORS['red']))],
+                        margin=dict(t=60, b=40)
+                    )
+                    st.plotly_chart(fig_bp, use_container_width=True)
+                    st.caption(f"LM={bp_stat} | p={bp_p}")
+
+            # Durbin-Watson
+            with col_dw:
+                ac_data = diag_data.get('AUTOCORRELATION', {})
+                if 'error' in ac_data:
+                    st.warning(f"DW: {ac_data['error']}")
+                else:
+                    dw_info = ac_data.get('durbin_watson', {})
+                    dw_val = dw_info.get('statistic', 2.0)
+                    dw_pass = dw_info.get('pass', True)
+
+                    fig_dw = go.Figure(go.Indicator(
+                        mode='gauge+number',
+                        value=dw_val,
+                        title={'text': 'Durbin-Watson'},
+                        number={'valueformat': '.3f'},
+                        gauge=dict(
+                            axis=dict(range=[0, 4]),
+                            bar=dict(color=COLORS['green'] if dw_pass else COLORS['red']),
+                            steps=[
+                                dict(range=[0, 1.5], color='rgba(233,69,96,0.3)'),
+                                dict(range=[1.5, 2.5], color='rgba(43,147,72,0.3)'),
+                                dict(range=[2.5, 4], color='rgba(233,69,96,0.3)'),
+                            ],
+                        ),
+                    ))
+                    badge_dw = '✅ PASS' if dw_pass else '⚠️ FAIL'
+                    fig_dw.update_layout(
+                        height=220, **DARK_TEMPLATE,
+                        annotations=[dict(text=badge_dw, x=0.5, y=-0.05, showarrow=False,
+                                         font=dict(size=14, color=COLORS['green'] if dw_pass else COLORS['red']))],
+                        margin=dict(t=60, b=40)
+                    )
+                    st.plotly_chart(fig_dw, use_container_width=True)
+
+                    lb_info = ac_data.get('ljung_box', {})
+                    st.caption(f"DW={dw_val:.3f} | Ljung-Box p={lb_info.get('p_value', 'N/A')}")
+
+            # Jarque-Bera
+            with col_jb:
+                norm_data = diag_data.get('NORMALITY', {})
+                if 'error' in norm_data:
+                    st.warning(f"JB: {norm_data['error']}")
+                else:
+                    jb_info = norm_data.get('jarque_bera', {})
+                    jb_pass = jb_info.get('pass', False)
+                    jb_p = jb_info.get('p_value', 0)
+                    jb_skew = jb_info.get('skewness', 0)
+                    jb_kurt = jb_info.get('kurtosis', 0)
+
+                    fig_jb = go.Figure(go.Indicator(
+                        mode='gauge+number',
+                        value=jb_p if isinstance(jb_p, (int, float)) else 0,
+                        title={'text': 'Jarque-Bera'},
+                        number={'valueformat': '.4f'},
+                        gauge=dict(
+                            axis=dict(range=[0, 1]),
+                            bar=dict(color=COLORS['green'] if jb_pass else COLORS['red']),
+                            threshold=dict(line=dict(color='white', width=3), thickness=0.8, value=alpha_choice),
+                            steps=[
+                                dict(range=[0, alpha_choice], color='rgba(233,69,96,0.3)'),
+                                dict(range=[alpha_choice, 1], color='rgba(43,147,72,0.3)'),
+                            ],
+                        ),
+                    ))
+                    badge_jb = '✅ PASS' if jb_pass else '⚠️ FAIL'
+                    fig_jb.update_layout(
+                        height=220, **DARK_TEMPLATE,
+                        annotations=[dict(text=badge_jb, x=0.5, y=-0.05, showarrow=False,
+                                         font=dict(size=14, color=COLORS['green'] if jb_pass else COLORS['red']))],
+                        margin=dict(t=60, b=40)
+                    )
+                    st.plotly_chart(fig_jb, use_container_width=True)
+                    st.caption(f"Skew={jb_skew:.3f} | Kurt={jb_kurt:.3f}")
+
+                    # Residual histogram
+                    residuals_list = norm_data.get('residuals', [])
+                    if residuals_list:
+                        with st.expander("📊 Phân phối Phần dư (Histogram)"):
+                            fig_hist = go.Figure(go.Histogram(
+                                x=residuals_list, nbinsx=12,
+                                marker_color=COLORS['cyan'], opacity=0.7,
+                                name='Residuals'
+                            ))
+                            fig_hist.update_layout(
+                                title='Phân phối Phần dư Mô hình Log-Log',
+                                xaxis_title='Residual', yaxis_title='Frequency',
+                                **DARK_TEMPLATE, height=280
+                            )
+                            st.plotly_chart(fig_hist, use_container_width=True)
+
+            # ════════════════════════════════════════════════════════════════
+            # PANEL 3: BACKTESTING
+            # ════════════════════════════════════════════════════════════════
+            st.divider()
+            st.subheader("③ Kiểm định Sai số Dự báo — Backtesting (Expanding Window)")
+
+            bt_data = diag_data.get('BACKTESTING', {})
+            if 'error' in bt_data:
+                st.warning(f"Backtesting: {bt_data['error']}")
+            else:
+                bt_config = bt_data.get('config', {})
+                bt_metrics = bt_data.get('metrics', {})
+                bt_results = bt_data.get('results', [])
+
+                st.markdown(
+                    f'<div class="info-box"><b>Phương pháp:</b> {bt_config.get("method", "")}. '
+                    f'COVID Dummy: {"Bật" if bt_config.get("use_covid_dummy") else "Tắt"}. '
+                    f'Tổng {bt_metrics.get("n_tests", 0)} năm kiểm tra.</div>',
+                    unsafe_allow_html=True
+                )
+
+                if bt_results:
+                    # Metrics badges
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("MAE (Sai số tuyệt đối TB)", f"{bt_metrics.get('MAE', 0):,.0f}")
+                    m2.metric("RMSE (Căn bậc 2 sai số)", f"{bt_metrics.get('RMSE', 0):,.0f}")
+                    mape_val = bt_metrics.get('MAPE', 0)
+                    mape_color = 'normal' if mape_val < 10 else 'inverse'
+                    m3.metric("MAPE (Sai số % TB)", f"{mape_val:.1f}%",
+                              delta='Tốt' if mape_val < 10 else 'Cần cải thiện',
+                              delta_color=mape_color)
+
+                    # Chart: Actual vs Predicted
+                    bt_years = [r['year'] for r in bt_results]
+                    bt_actual = [r['actual_tc'] for r in bt_results]
+                    bt_predicted = [r['predicted_tc'] for r in bt_results]
+                    bt_errors = [r['error_pct'] for r in bt_results]
+
+                    col_bt1, col_bt2 = st.columns([2, 1])
+                    with col_bt1:
+                        fig_bt = go.Figure()
+                        fig_bt.add_trace(go.Scatter(
+                            x=bt_years, y=bt_actual, name='Thực tế',
+                            mode='lines+markers', line=dict(color=COLORS['cyan'], width=3),
+                            marker=dict(size=10)
+                        ))
+                        fig_bt.add_trace(go.Scatter(
+                            x=bt_years, y=bt_predicted, name='Dự báo',
+                            mode='lines+markers', line=dict(color=COLORS['orange'], width=3, dash='dash'),
+                            marker=dict(size=10, symbol='diamond')
+                        ))
+                        fig_bt.update_layout(
+                            title='Backtesting: Tổng Chi phí Thực tế vs Dự báo',
+                            xaxis_title='Năm', yaxis_title='Tổng Chi phí (VND)',
+                            **DARK_TEMPLATE, height=350,
+                            legend=dict(orientation='h', y=-0.2)
+                        )
+                        st.plotly_chart(fig_bt, use_container_width=True)
+
+                    with col_bt2:
+                        err_colors = [COLORS['green'] if e < 5 else (COLORS['yellow'] if e < 10 else COLORS['red'])
+                                      for e in bt_errors]
+                        fig_err = go.Figure(go.Bar(
+                            x=bt_years, y=bt_errors,
+                            marker_color=err_colors,
+                            text=[f'{e:.1f}%' for e in bt_errors],
+                            textposition='outside'
+                        ))
+                        fig_err.update_layout(
+                            title='Sai số Dự báo (%)',
+                            yaxis_title='%', **DARK_TEMPLATE, height=350
+                        )
+                        st.plotly_chart(fig_err, use_container_width=True)
+
+            # ════════════════════════════════════════════════════════════════
+            # PANEL 4: DISTRIBUTIONAL ANALYSIS (Oil & FX)
+            # ════════════════════════════════════════════════════════════════
+            st.divider()
+            st.subheader("④ Kiểm định Cấu trúc Phân phối — Oil Price & FX Rate")
+
+            dist_data = diag_data.get('DISTRIBUTIONAL', {})
+            if 'error' in dist_data:
+                st.warning(f"Distributional: {dist_data['error']}")
+            else:
+                dist_tests = dist_data.get('tests', {})
+                col_oil, col_fx = st.columns(2)
+
+                for col_target, var_name, display_name in [(col_oil, 'Oil_Price', 'Giá Dầu Jet A1'), (col_fx, 'FX_Rate', 'Tỷ giá USD/VND')]:
+                    with col_target:
+                        var_data = dist_tests.get(var_name, {})
+                        if 'error' in var_data:
+                            st.warning(f"{display_name}: {var_data['error']}")
+                            continue
+
+                        stats = var_data.get('statistics', {})
+                        dist_type = var_data.get('distribution_type', 'N/A')
+                        ks = var_data.get('ks_test', {})
+                        sw = var_data.get('shapiro_wilk', {})
+
+                        # Distribution badge
+                        if 'Normal' in dist_type or 'chuẩn' in dist_type:
+                            st.success(f"**{display_name}**: {dist_type}")
+                        elif 'Fat' in dist_type:
+                            st.error(f"**{display_name}**: {dist_type}")
+                        else:
+                            st.warning(f"**{display_name}**: {dist_type}")
+
+                        # Stats table
+                        st.markdown(
+                            f"- **KS test:** stat={ks.get('statistic', 'N/A')}, p={ks.get('p_value', 'N/A')} "
+                            f"{'✅' if ks.get('is_normal') else '❌'}\n"
+                            f"- **Shapiro-Wilk:** stat={sw.get('statistic', 'N/A')}, p={sw.get('p_value', 'N/A')} "
+                            f"{'✅' if sw.get('is_normal') else '❌'}\n"
+                            f"- **Skewness:** {stats.get('skewness', 'N/A')} | "
+                            f"**Excess Kurtosis:** {stats.get('excess_kurtosis', 'N/A')}\n"
+                            f"- **Mean Return:** {stats.get('mean_return', 'N/A')}% | "
+                            f"**Std Return:** {stats.get('std_return', 'N/A')}%"
+                        )
+
+                        # Histogram of log-returns
+                        log_returns = var_data.get('log_returns', [])
+                        if log_returns:
+                            fig_dist = go.Figure(go.Histogram(
+                                x=[r * 100 for r in log_returns],
+                                nbinsx=10,
+                                marker_color=COLORS['teal'] if var_name == 'Oil_Price' else COLORS['purple'],
+                                opacity=0.75, name='Log-Returns'
+                            ))
+                            # Overlay normal curve
+                            x_norm = np.linspace(min(log_returns)*100, max(log_returns)*100, 50)
+                            from scipy.stats import norm as _norm
+                            y_norm = _norm.pdf(x_norm, loc=stats.get('mean_return', 0), scale=stats.get('std_return', 1))
+                            y_norm_scaled = y_norm * len(log_returns) * (max(log_returns) - min(log_returns)) * 100 / 10
+                            fig_dist.add_trace(go.Scatter(
+                                x=x_norm, y=y_norm_scaled,
+                                mode='lines', name='Normal fit',
+                                line=dict(color='white', width=2, dash='dash')
+                            ))
+                            fig_dist.update_layout(
+                                title=f'{display_name} — Log-Returns Distribution',
+                                xaxis_title='Log-Return (%)', yaxis_title='Frequency',
+                                **DARK_TEMPLATE, height=280,
+                                showlegend=False
+                            )
+                            st.plotly_chart(fig_dist, use_container_width=True)
+
+            # ════════════════════════════════════════════════════════════════
+            # PANEL 5: WACC-g SINGULARITY MAP
+            # ════════════════════════════════════════════════════════════════
+            st.divider()
+            st.subheader("⑤ Điểm Kỳ dị Toán học — Ma trận WACC-g (Singularity Detection)")
+
+            sing_data = diag_data.get('SINGULARITY', {})
+            if 'error' in sing_data:
+                st.warning(f"Singularity: {sing_data['error']}")
+            else:
+                n_sing = sing_data.get('n_singular', 0)
+                n_near = sing_data.get('n_near_singular', 0)
+                total = sing_data.get('total_cells', 1)
+                cond = sing_data.get('condition_number', 'N/A')
+                stability = sing_data.get('stability', 'N/A')
+
+                s1, s2, s3 = st.columns(3)
+                s1.metric("Ô Kỳ dị (WACC ≤ g)", f"{n_sing}", f"{n_sing/total*100:.1f}% ma trận")
+                s2.metric("Ô Gần Kỳ dị (gap < 0.5%)", f"{n_near}")
+                if stability == 'Ổn định (Well-conditioned)':
+                    s3.metric("Condition Number", f"{cond}", stability)
+                else:
+                    s3.metric("Condition Number", f"{cond}", stability, delta_color='inverse')
+
+                # Singularity heatmap
+                sing_map = sing_data.get('singularity_map', [])
+                if sing_map:
+                    wacc_labels = sing_data.get('wacc_labels', [])
+                    g_labels = sing_data.get('g_labels', [])
+
+                    # Custom colorscale: 0=Safe(green), 1=Near(yellow), 2=Singular(red)
+                    fig_sing = go.Figure(go.Heatmap(
+                        z=sing_map,
+                        x=g_labels,
+                        y=wacc_labels,
+                        colorscale=[
+                            [0, 'rgba(43,147,72,0.4)'],
+                            [0.45, 'rgba(43,147,72,0.4)'],
+                            [0.5, 'rgba(249,199,79,0.6)'],
+                            [0.75, 'rgba(249,199,79,0.6)'],
+                            [0.76, 'rgba(233,69,96,0.8)'],
+                            [1.0, 'rgba(233,69,96,0.8)'],
+                        ],
+                        text=[[('SINGULAR' if v == 2 else ('NEAR' if v == 1 else '')) for v in row] for row in sing_map],
+                        texttemplate='%{text}',
+                        showscale=False,
+                        hovertemplate='WACC=%{y}, g=%{x}<br>Zone: %{text}<extra></extra>'
+                    ))
+                    fig_sing.update_layout(
+                        title='Bản đồ Vùng Kỳ dị: WACC vs g (Xanh=An toàn, Vàng=Gần kỳ dị, Đỏ=Kỳ dị)',
+                        xaxis_title='Tốc độ tăng trưởng (g)',
+                        yaxis_title='Chi phí vốn (WACC)',
+                        **DARK_TEMPLATE, height=450
+                    )
+                    st.plotly_chart(fig_sing, use_container_width=True)
+
+                st.markdown(
+                    '<div class="info-box">'
+                    '<b>Giải thích:</b> Khi WACC ≤ g, mẫu số trong mô hình Gordon Growth tiến về 0, '
+                    'tạo ra giá trị Terminal Value tiệm cận vô cực (singularity). '
+                    'Các ô <b>NEAR</b> (gap < 0.5%) là vùng nhạy cảm cực đoan — '
+                    'biến động nhỏ trong WACC hoặc g có thể gây thay đổi lớn trong định giá.'
+                    '</div>',
+                    unsafe_allow_html=True
+                )
+
+            # ════════════════════════════════════════════════════════════════
+            # PANEL 6: ENDOGENEITY DIAGNOSTICS
+            # ════════════════════════════════════════════════════════════════
+            st.divider()
+            st.subheader("⑥ Kiểm định Nội sinh — Cấu trúc Vốn (Endogeneity Check)")
+
+            endo_data = diag_data.get('ENDOGENEITY', {})
+            if 'error' in endo_data:
+                st.warning(f"Endogeneity: {endo_data['error']}")
+            else:
+                method_note = endo_data.get('method_note', '')
+                if method_note:
+                    st.info(f"💡 {method_note}")
+
+                # Granger Causality results
+                granger_tests = endo_data.get('granger_tests', [])
+                if granger_tests:
+                    st.markdown("##### Kiểm định Granger Causality")
+
+                    gc_rows = []
+                    for gc in granger_tests:
+                        if 'error' in gc:
+                            gc_rows.append({
+                                'Nhân quả': f"{gc['cause']} → {gc['effect']}",
+                                'Lag tối ưu': 'N/A',
+                                'F-stat': 'N/A',
+                                'p-value': 'N/A',
+                                'Kết luận': gc['error'],
+                            })
+                        else:
+                            is_causal = gc.get('is_granger_causal', False)
+                            gc_rows.append({
+                                'Nhân quả': f"{gc['cause']} → {gc['effect']}",
+                                'Lag tối ưu': gc.get('optimal_lag', 'N/A'),
+                                'F-stat': gc.get('f_statistic', 'N/A'),
+                                'p-value': gc.get('p_value', 'N/A'),
+                                'Kết luận': gc.get('conclusion', ''),
+                                'Nội sinh?': '⚠️ CÓ' if is_causal else '✅ KHÔNG',
+                            })
+
+                    gc_df = pd.DataFrame(gc_rows)
+                    st.dataframe(gc_df, use_container_width=True, hide_index=True)
+
+                    # Visualize Granger relationships
+                    valid_gc = [gc for gc in granger_tests if 'error' not in gc]
+                    if valid_gc:
+                        fig_gc = go.Figure()
+                        gc_names = [f"{gc['cause']}→{gc['effect']}" for gc in valid_gc]
+                        gc_pvals = [gc.get('p_value', 1) for gc in valid_gc]
+                        gc_colors = [COLORS['red'] if p < alpha_choice else COLORS['green'] for p in gc_pvals]
+
+                        fig_gc.add_trace(go.Bar(
+                            x=gc_names, y=gc_pvals,
+                            marker_color=gc_colors, opacity=0.8,
+                            text=[f'{p:.4f}' for p in gc_pvals],
+                            textposition='outside'
+                        ))
+                        fig_gc.add_hline(
+                            y=alpha_choice, line_dash='dash', line_color='white',
+                            annotation_text=f'α = {alpha_choice}',
+                            annotation_font=dict(size=12, color='white')
+                        )
+                        fig_gc.update_layout(
+                            title=f'Granger Causality p-values (Đỏ = Nội sinh tại α={alpha_choice*100:.0f}%)',
+                            yaxis_title='p-value', **DARK_TEMPLATE, height=350,
+                            xaxis_tickangle=-15
+                        )
+                        st.plotly_chart(fig_gc, use_container_width=True)
+
+                    with st.expander("📋 Chi tiết Lag Selection (AIC/BIC)"):
+                        for gc in granger_tests:
+                            if 'lag_details' in gc:
+                                st.markdown(f"**{gc['cause']} → {gc['effect']}** (Lag tối ưu: {gc.get('optimal_lag', '?')})")
+                                lag_df = pd.DataFrame(gc['lag_details'])
+                                st.dataframe(lag_df, use_container_width=True, hide_index=True)
+
+                # Hausman heuristic
+                hausman = endo_data.get('hausman_heuristic')
+                if hausman:
+                    st.markdown("##### Hausman-type Heuristic (Tương quan Phần dư — D/E)")
+                    corr_val = hausman.get('abs_correlation', 0)
+                    is_endo = hausman.get('is_endogenous', False)
+
+                    if is_endo:
+                        st.error(f"⚠️ {hausman['conclusion']} — Tương quan giữa phần dư mô hình Log-Log và hệ số D/E vượt ngưỡng 0.3, "
+                                 f"nghi ngờ nội sinh trong cấu trúc vốn.")
+                    else:
+                        st.success(f"✅ {hausman['conclusion']} — Biến đòn bẩy tài chính có thể coi là ngoại sinh.")
+
+                    fig_h = go.Figure(go.Indicator(
+                        mode='gauge+number',
+                        value=corr_val,
+                        title={'text': '|ρ(Residual, D/E)|'},
+                        number={'valueformat': '.4f'},
+                        gauge=dict(
+                            axis=dict(range=[0, 1]),
+                            bar=dict(color=COLORS['red'] if is_endo else COLORS['green']),
+                            threshold=dict(line=dict(color='white', width=3), thickness=0.8, value=0.3),
+                            steps=[
+                                dict(range=[0, 0.3], color='rgba(43,147,72,0.3)'),
+                                dict(range=[0.3, 1.0], color='rgba(233,69,96,0.3)'),
+                            ],
+                        ),
+                    ))
+                    fig_h.update_layout(height=220, **DARK_TEMPLATE, margin=dict(t=60, b=20))
+                    st.plotly_chart(fig_h, use_container_width=True)
 
 
 if __name__ == "__main__":
