@@ -255,9 +255,19 @@ class Forecaster:
                 ev_ebitda_row = self._get_row(fi, r'^EV/EBITDA$')
                 if ev_ebitda_row is not None:
                     years = self._get_years(fi)
-                    # Lấy mean của các EV/EBITDA dương (Loại bỏ các năm crisis)
+                    # Lọc EV/EBITDA dương
                     hist_multiples = ev_ebitda_row[years].astype(float)
-                    ev_ebitda_multiple = float(hist_multiples[hist_multiples > 0].mean())
+                    valid_multiples = hist_multiples[hist_multiples > 0].dropna()
+                    # Đồng nhất với valuation_bands(): lọc thêm các năm VCSH dương
+                    # để loại bỏ các bội số bị méo (vd: 2023 = 24.94x khi VCSH âm)
+                    bs = self.dfs.get('BALANCE SHEET')
+                    if bs is not None:
+                        vcsh_row = self._get_row(bs, r'^VỐN CHỦ SỞ HỮU$')
+                        if vcsh_row is not None:
+                            vcsh_series = vcsh_row[years].astype(float)
+                            positive_vcsh_years = vcsh_series[vcsh_series > 0].index
+                            valid_multiples = valid_multiples[valid_multiples.index.isin(positive_vcsh_years)]
+                    ev_ebitda_multiple = float(valid_multiples.mean())
                     if pd.isna(ev_ebitda_multiple): ev_ebitda_multiple = 8.0
                 else:
                     ev_ebitda_multiple = 8.0
