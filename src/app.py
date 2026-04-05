@@ -61,7 +61,7 @@ COLORS = {
 }
 
 @st.cache_data
-def load_data(_v=7):  # bump _v to invalidate old cache
+def load_data(_v=8):  # bump _v to invalidate old cache
     import os
     import json
     dfs = {}
@@ -641,113 +641,54 @@ def main():
                     unsafe_allow_html=True
                 )
 
-                # ── BIỂU ĐỒ SCATTER ĐƯỜNG CONG TIỆM CẬN (ASYMPTOTIC CURVE) ──
-                st.subheader("Trực quan hóa Toán học: Đường cong Tiệm cận (Asymptotic Margin Curve)")
-
-                # Lấy dữ liệu margin thực tế
+                # Khai thác Cấu trúc Giá thành cốt lõi cho Bước Tiếp theo
                 ebit_margin_pct = get_row_data(is_vert, r'^EBIT$')
                 if ebit_margin_pct is not None:
-                    scatter_margins = [float(ebit_margin_pct.get(y, np.nan)) for y in years]
-                    scatter_revs = [float(revenue[y])/SCALE for y in years]
-
-                    # Tính toán đường cong lý thuyết dựa trên dữ liệu năm mới nhất (hoặc trung bình)
-                    # Phương trình: Margin = (1 - v) - F/R
-                    # Ta lấy năm cuối cùng (2025 hoặc 2024 có dữ liệu dương) để làm hệ số đại diện
                     latest_r = float(revenue[years[-1]])/SCALE
                     latest_f = fc_list[-1]/SCALE
                     latest_e = ebit_list[-1]/SCALE
-                    # Biên gộp = Lãi gộp / DT. Nhưng ta cần biến phí (v).
-                    # EBIT = Doanh thu - Biến phí - Định phí => Biến phí = Doanh thu - EBIT - Định phí
                     latest_vc = latest_r - latest_e - latest_f
                     latest_v_ratio = latest_vc / latest_r if latest_r > 0 else 0.85 # fallback
 
-                    # Mảng giả lập doanh thu R từ 10k đến 160k
-                    theo_r = np.linspace(10, 160, 100)
-                    theo_margin = ((1 - latest_v_ratio) - (latest_f / theo_r)) * 100
+                    # ── HỒI QUY CẤU TRÚC LOG-LOG (CORE ELASTICITY & MACRO SHOCKS) ──
+                    macro_reg = dfs.get('MACRO_REGRESSION')
+                    if macro_reg:
+                        st.subheader("Trục Hồi quy Log-Log (Core Elasticity & Macro Shocks)")
+                        st.markdown("Xác định độ co giãn chi phí vận hành cốt lõi thông qua mô hình cấu trúc Logarit (Log-Log) qua 15 năm. Phương pháp này vô hiệu hóa sai lệch do gia tăng quy mô đội bay, đồng thời bóc tách hoàn toàn nhiễu từ Khủng hoảng Covid-19, cú sốc Tỷ giá và Giá dầu Jet A1.")
+                        
+                        r1, r2, r3, r4 = st.columns(4)
+                        r1.metric("Độ co giãn Dầu (ε_oil)", f"{macro_reg['elasticity_oil']*100:.2f}%", "+1% USD/thùng", delta_color="off")
+                        r2.metric("Độ co giãn Tỷ giá (ε_fx)", f"{macro_reg['elasticity_fx']*100:.2f}%", "+1% USD/VND", delta_color="off")
+                        if not np.isnan(macro_reg['dol_core']):
+                            r3.metric("DOL Cốt lõi", f"{macro_reg['dol_core']:.2f}x", "Core Operational Leverage", delta_color="off")
+                        else:
+                            r3.metric("DOL Cốt lõi", "N/A", "Core Operational Leverage", delta_color="off")
+                            
+                        if not np.isnan(macro_reg['dfl_core']):
+                            r4.metric("DFL Cốt lõi", f"{macro_reg['dfl_core']:.2f}x", "Core Financial Leverage", delta_color="off")
+                        else:
+                            r4.metric("DFL Cốt lõi", "N/A", "Core Financial Leverage", delta_color="off")
+                        
+                        reg_method = macro_reg.get('reg_method', 'OLS')
+                        max_corr = macro_reg.get('max_corr', 0.0)
+                        method_color = "🔴" if max_corr > 0.95 else ("🟡" if max_corr > 0.85 else "🟢")
+                        st.info(
+                            f"💡 Hệ số ε_oil mô tả: Cứ giá dầu thế giới tăng lên 1%, thì Tổng chi phí của HVN sẽ phình lên thêm "
+                            f"{macro_reg['elasticity_oil']*100:.2f}%. Mức độ đáng tin cậy của mô hình (R²) = {macro_reg['r_squared']*100:.1f}%.  \n"
+                            f"{method_color} **Phương pháp hồi quy:** `{reg_method}` | "
+                            f"**Tương quan chéo tối đa giữa biến:** `{max_corr:.2f}` "
+                            f"({'Đa cộng tuyến cao — Ridge đã được kích hoạt' if max_corr > 0.85 else 'Ổn định — OLS hợp lệ'})"
+                        )
 
-                    fig_scatter = go.Figure()
-                    
-                    # 1. Đường cong lý thuyết
-                    fig_scatter.add_trace(go.Scatter(
-                        x=theo_r, y=theo_margin,
-                        mode='lines',
-                        name='Đường cong Cấu trúc (Lý thuyết)',
-                        line=dict(color='rgba(255, 255, 255, 0.4)', width=3, dash='dot'),
-                        hoverinfo='skip'
-                    ))
 
-                    # 2. Trần tiệm cận (Limit)
-                    asym_limit = (1 - latest_v_ratio) * 100
-                    fig_scatter.add_hline(
-                        y=asym_limit, 
-                        line_dash='dash', line_color=COLORS['cyan'],
-                        annotation_text=f'Giới hạn trần tiệm cận: {asym_limit:.1f}%', 
-                        annotation_position='bottom right',
-                        annotation_font=dict(color=COLORS['cyan'])
-                    )
-
-                    # 3. Trục Break-even (Doanh thu hòa vốn)
-                    # F / (1 - v)
-                    theo_be = latest_f / (1 - latest_v_ratio) if (1 - latest_v_ratio) > 0 else 121.0
-                    fig_scatter.add_vline(
-                        x=theo_be,
-                        line_dash='dash', line_color=COLORS['red'],
-                        annotation_text=f'Break-even {theo_be:.0f}k tỷ',
-                        annotation_position='top left',
-                        annotation_font=dict(color=COLORS['red'])
-                    )
-
-                    # 4. Vẽ đường nối các năm để thấy quỹ đạo
-                    fig_scatter.add_trace(go.Scatter(
-                        x=scatter_revs, y=scatter_margins,
-                        mode='lines',
-                        name='Quỹ đạo (Trajectory)',
-                        line=dict(color='rgba(255, 255, 0, 0.3)', width=1, dash='solid'),
-                        hoverinfo='skip'
-                    ))
-
-                    # 5. Dữ liệu thực tế các năm
-                    fig_scatter.add_trace(go.Scatter(
-                        x=scatter_revs, y=scatter_margins,
-                        mode='markers+text',
-                        name='Thực tế qua các năm',
-                        marker=dict(
-                            color=[COLORS['green'] if m >= 0 else COLORS['red'] for m in scatter_margins],
-                            size=10, line=dict(color='white', width=1)
-                        ),
-                        text=[str(y) for y in years],
-                        textposition='top center',
-                        textfont=dict(size=9, color='white')
-                    ))
-
-                    fig_scatter.update_layout(
-                        title='Tương quan Doanh thu & Biên EBIT (Hàm Tiệm cận)',
-                        xaxis_title='Doanh thu Tuyệt đối (nghìn tỷ VND)',
-                        yaxis_title='Biên EBIT (%)',
-                        **DARK_TEMPLATE,
-                        hovermode='closest',
-                        legend=dict(orientation='h', y=-0.2),
-                        height=500
-                    )
-                    
-                    st.plotly_chart(fig_scatter, use_container_width=True)
-                    st.markdown(
-                        '<div class="info-box">'
-                        '<b>Hàm số: Biên EBIT = (1 - Tỷ lệ Biến phí) - (Định phí / Doanh thu)</b><br>'
-                        'Biểu đồ này giải thích trực quan bản chất Đòn bẩy Hoạt động: Khi sản lượng nhỏ, gánh nặng Định phí (Khấu hao, thuê máy bay) khổng lồ kéo biên lợi nhuận xuống vực sâu. '
-                        'Khi thoát khỏi điểm hòa vốn (đường đỏ), mọi đồng doanh thu vọt thẳng xuống lợi nhuận với phương thẳng đứng.<br>'
-                        '<b>Nhưng khi doanh thu đã quá lớn (2025), sự gia tăng bị bão hòa. Đường thẳng bẻ cong nằm ngang và tiến sát vào Giới hạn Trần (Đường lam). Tức là không thể nâng Biên EBIT mãi mãi bằng cách bơm thêm doanh thu.</b>'
-                        '</div>',
-                        unsafe_allow_html=True
-                    )
 
                 # ── MA TRẬN DỊCH CHUYỂN ĐIỂM HÒA VỐN & DOL (MACRO SENSITIVITY) ──
                 st.markdown("<br><br>", unsafe_allow_html=True)
                 st.subheader("Ma trận Nhạy cảm: Dịch chuyển Điểm hòa vốn & Đòn bẩy Hoạt động")
-                st.markdown("Mô phỏng tác động của Biến số Vĩ mô (Giá dầu & Tỷ giá) lên Cấu trúc chi phí doanh nghiệp.<br>"
+                st.markdown("Mô phỏng tác động rủi ro của Biến số Vĩ mô (Giá dầu & Tỷ giá) lên Điểm hòa vốn và Lợi nhuận (EBIT) bằng Hệ số Co giãn ML Log-Log.<br>"
                             "<span style='color: #888888; font-size: 0.9em;'>"
-                            "<b>Trạng thái Mỏ neo (Base 2025):</b> Điểm hòa vốn cốt lõi ~72.519 tỷ VND | Giá Jet A1 gốc ~100 USD/thùng | Tỷ giá gốc ~25.400 VND/USD.<br>"
-                            "<b>Hệ số đòn bẩy rủi ro:</b> +1 USD Jet A1 $\\rightarrow$ +452.4 tỷ VND Biến phí | +1% Tỷ giá $\\rightarrow$ +533 tỷ VND Định phí.</span>",
+                            "<b>Trạng thái Mỏ neo (Base 2025):</b> Điểm hòa vốn cốt lõi ~72.519 tỷ VND | Giá Jet A1 gốc ~90 USD/thùng | Tỷ giá ~26.300 VND/USD.<br>"
+                            "<b>Cơ chế truyền dẫn rủi ro:</b> Sốc Giá nhiên liệu ăn mòn Biến phí theo <i>ε_oil</i> | Sốc Tỷ giá (nợ nước ngoài) ăn mòn Định phí theo <i>ε_fx</i>.</span>",
                             unsafe_allow_html=True)
 
                 # Layout controls
@@ -867,11 +808,10 @@ def main():
         st.subheader("1. Định giá (Valuation)")
         c1, c2 = st.columns(2)
         with c1:
-            pe = get_fi_row(fi, r'^P/E$')
-            pb = get_fi_row(fi, r'^P/B$')
             ps = get_fi_row(fi, r'^P/S$')
-            fig_val = plot_line_multi({'P/E': pe, 'P/B': pb, 'P/S': ps}, "Hệ số định giá", years, 'x')
+            fig_val = plot_line_multi({'P/S': ps}, "Hệ số định giá P/S", years, 'x')
             st.plotly_chart(fig_val, use_container_width=True)
+            st.info("Đã ẩn P/E, P/B do HVN có VCSH âm gây nhiễu.")
         with c2:
             ev_ebitda = get_fi_row(fi, r'^EV/EBITDA$')
             ev_rev = get_fi_row(fi, r'^EV/Revenue$')
@@ -896,81 +836,14 @@ def main():
         st.subheader("2. Khả năng sinh lời (Profitability)")
         c3, c4 = st.columns(2)
         with c3:
-            roe = get_fi_row(fi, r'^ROE')
-            roa = get_fi_row(fi, r'^ROA')
-            roic = get_fi_row(fi, r'^ROIC')
-            fig_prof = plot_line_multi({'ROE': roe, 'ROA': roa, 'ROIC': roic},
-                                       "ROE / ROA / ROIC (%)", years, '%')
+            roa = get_fi_row(fi, r'^ROA$')
+            roic = get_fi_row(fi, r'^ROIC$')
+            fig_prof = plot_line_multi({'ROA': roa, 'ROIC': roic},
+                                       "Tỷ suất Sinh lời Lõi: ROA / ROIC (%)", years, '%')
             st.plotly_chart(fig_prof, use_container_width=True)
 
         with c4:
-            st.markdown("**Ph\u00e2n t\u00edch DuPont 3 nh\u00e2n t\u1ed1 (Combo Bar\u2013Line)**")
-            if dupont is not None:
-                dp_years = [c for c in dupont.columns if c != 'Kho\u1ea3n m\u1ee5c']
-                ros_d = get_row_data(dupont, r'^ROS')
-                at_d  = get_row_data(dupont, r'^Asset Turnover')
-                lev_d = get_row_data(dupont, r'^Financial Leverage')
-                roe_d = get_row_data(dupont, r'^ROE')
-
-                fig_dup = make_subplots(
-                    rows=1, cols=3,
-                    subplot_titles=('ROS \u2014 Bi\u00ean LN r\u00f2ng (%)', 'Asset Turnover (x)', '\u0110\u00f2n b\u1ea9y TC (x)'),
-                    horizontal_spacing=0.08,
-                    specs=[[{"secondary_y": True}]*3]
-                )
-                # ROS bar + ROE line
-                if ros_d is not None:
-                    fig_dup.add_trace(go.Bar(
-                        name='ROS (%)', x=dp_years, y=ros_d,
-                        marker_color=COLORS['green'],
-                        text=[f'{v:.1f}%' for v in ros_d], textposition='outside',
-                        showlegend=True
-                    ), row=1, col=1, secondary_y=False)
-                if roe_d is not None:
-                    fig_dup.add_trace(go.Scatter(
-                        name='ROE (%)', x=dp_years, y=roe_d,
-                        mode='lines+markers',
-                        line=dict(color=COLORS['yellow'], width=2, dash='dot'),
-                        marker=dict(size=6), showlegend=True
-                    ), row=1, col=1, secondary_y=True)
-                # AT bar + ROE line
-                if at_d is not None:
-                    fig_dup.add_trace(go.Bar(
-                        name='AT (x)', x=dp_years, y=at_d,
-                        marker_color=COLORS['cyan'],
-                        text=[f'{v:.2f}x' for v in at_d], textposition='outside',
-                        showlegend=True
-                    ), row=1, col=2, secondary_y=False)
-                if roe_d is not None:
-                    fig_dup.add_trace(go.Scatter(
-                        name='ROE', x=dp_years, y=roe_d,
-                        mode='lines+markers',
-                        line=dict(color=COLORS['yellow'], width=2, dash='dot'),
-                        marker=dict(size=6), showlegend=False
-                    ), row=1, col=2, secondary_y=True)
-                # Lev bar + ROE line
-                if lev_d is not None:
-                    fig_dup.add_trace(go.Bar(
-                        name='Lev (x)', x=dp_years, y=lev_d,
-                        marker_color=COLORS['orange'],
-                        text=[f'{v:.1f}x' for v in lev_d], textposition='outside',
-                        showlegend=True
-                    ), row=1, col=3, secondary_y=False)
-                if roe_d is not None:
-                    fig_dup.add_trace(go.Scatter(
-                        name='ROE', x=dp_years, y=roe_d,
-                        mode='lines+markers',
-                        line=dict(color=COLORS['yellow'], width=2, dash='dot'),
-                        marker=dict(size=6), showlegend=False
-                    ), row=1, col=3, secondary_y=True)
-                fig_dup.update_layout(
-                    height=400, **DARK_TEMPLATE,
-                    title='DuPont 3 nhân tố ROE (đường vàng chấm = ROE %)',
-                    legend=dict(orientation='h', y=-0.15, font=dict(size=10))
-                )
-                for i in range(1, 4):
-                    fig_dup.update_yaxes(title_text='', secondary_y=True, row=1, col=i)
-                st.plotly_chart(fig_dup, use_container_width=True)
+            st.info("Khu vực Phân rã 3 nhân tố DuPont ROE đã bị vô hiệu hóa tự động. (Vốn chủ sở hữu âm gây nhiễu).")
 
         # --- DuPont Impact (OLS Best-fit only — Shapley removed) ---
         def _render_dupont_impact(impact_df, betas_dict, metric_label):
@@ -1001,8 +874,8 @@ def main():
                 yaxis_title='%pts', legend=dict(orientation='h', y=-0.2, font=dict(size=10)))
             st.plotly_chart(fig_imp, use_container_width=True)
 
-        st.subheader("Phân rã ΔROE (Best-fit OLS)")
-        _render_dupont_impact(dupont_impact, dupont_betas, 'ROE')
+        # st.subheader("Phân rã ΔROE (Best-fit OLS)")
+        # _render_dupont_impact(dupont_impact, dupont_betas, 'ROE')
         st.subheader("Phân rã ΔROA — 4 nhân tố (Best-fit OLS)")
         _render_dupont_impact(dupont_impact_roa, dupont_betas_roa, 'ROA')
         st.subheader("Phân rã ΔROIC — 2 nhân tố (Best-fit OLS)")
@@ -1428,7 +1301,7 @@ Phương pháp: <b>EV/EBITDA Mean Reversion</b> + <b>DCF Terminal Value Integrat
             # Sliders for parameters
             st.write("### 🛠️ Tham số đầu vào")
             s_base_oil = st.number_input("Giá dầu Jet A1 nền ($/thùng)", value=90.0, step=1.0, help="Giá dầu tham chiếu để tính biến động")
-            s_base_fx = st.number_input("Tỷ giá USD/VND nền", value=25000.0, step=100.0, help="Tỷ giá tham chiếu để tính biến động")
+            s_base_fx = st.number_input("Tỷ giá USD/VND nền", value=26300.0, step=100.0, help="Tỷ giá tham chiếu để tính biến động")
             s_fuel_ratio = st.slider("Tỷ trọng Nhiên liệu/Opex (%)", 20, 60, 38) / 100
             s_debt_ratio = st.slider("Tỷ lệ Nợ USD/Tổng nợ (%)", 50, 100, 80) / 100
             
@@ -1437,7 +1310,7 @@ Phương pháp: <b>EV/EBITDA Mean Reversion</b> + <b>DCF Terminal Value Integrat
             
             st.caption("Cấu hình dải chạy Ma trận:")
             o_min, o_max = st.slider("Dải giá Dầu ($)", 50, 150, (70, 110))
-            f_min, f_max = st.slider("Dải tỷ giá (VND)", 23000, 27000, (24500, 26000), step=100)
+            f_min, f_max = st.slider("Dải tỷ giá (VND)", 24000, 28000, (25000, 27500), step=100)
 
         struct_result = forecaster_obj.structural_sensitivity(
             base_oil=s_base_oil, base_fx=s_base_fx,
@@ -1515,39 +1388,57 @@ Phương pháp: <b>EV/EBITDA Mean Reversion</b> + <b>DCF Terminal Value Integrat
 
         # ---- 5.3c SCENARIO ANALYSIS (LINE CHART) ----
         st.subheader("📈 3c. Kịch bản Định giá Phân kỳ (Scenario Analysis)")
+        st.markdown(
+            '<div class="info-box"><b>Tích hợp định lượng:</b> Kịch bản được neo trực tiếp từ '
+            'Ma trận Nhạy cảm Cấu trúc (3b) và Độ co giãn Log-Log. '
+            'Mỗi năm dự phóng tính toán EBITDA dựa trên quỹ đạo giá dầu & tỷ giá thực tế, '
+            'không sử dụng hệ số tăng trưởng giả định.</div>',
+            unsafe_allow_html=True
+        )
         
-        scenario_data = forecaster_obj.scenario_analysis()
+        scenario_data = forecaster_obj.scenario_analysis(
+            base_oil=s_base_oil, base_fx=s_base_fx,
+            fuel_opex_ratio=s_fuel_ratio, usd_debt_ratio=s_debt_ratio
+        )
         if scenario_data:
+            sp = scenario_data.get('scenario_params', {})
             col_sc1, col_sc2 = st.columns([1, 2])
             with col_sc1:
                 st.markdown(f"""
                 **Kịch bản Cơ sở (Base):**
-                - Giá dầu Jet Fuel $85-90, tỷ giá ổn định.
-                - Tăng trưởng EBITDA ổn định (~7%).
-                - Định giá hội tụ về giá trị thực ({scenario_data['base'][-1]:.1f}x).
+                - Dầu ~${s_base_oil:.0f}/thùng, FX trượt ~1%/năm.
+                - Doanh thu tăng 5%/năm, EBITDA theo cấu trúc.
+                - Định giá hội tụ: **{scenario_data['base'][-1]:.1f}x**.
                 
                 **Kịch bản Tiêu cực (Negative):**
-                - Giá dầu tăng >15% hoặc VND mất giá mạnh.
-                - EBITDA sụt giảm mạnh trong năm đầu.
-                - Đẩy EV/EBITDA lên mức đắt đỏ ({scenario_data['negative'][-1]:.1f}x).
+                - Dầu sốc lên **${sp.get('neg_oil', 0):.0f}**, VND mất giá **5%** năm 1.
+                - EBITDA năm 1: **{sp.get('neg_ebitda_chg', 0):+.1f}%** (từ Ma trận 3b).
+                - EV/EBITDA: **{scenario_data['negative'][-1]:.1f}x** (cuối kỳ).
                 
                 **Kịch bản Tích cực (Positive):**
-                - Hạ tầng Long Thành (2026) & Trung Quốc phục hồi.
-                - Yield Management tối ưu, dòng tiền bùng nổ.
-                - EV/EBITDA giảm mạnh nhờ hiệu quả vận hành ({scenario_data['positive'][-1]:.1f}x).
+                - Dầu giảm về **${sp.get('pos_oil', 0):.0f}**, VND tăng giá nhẹ.
+                - EBITDA năm 1: **{sp.get('pos_ebitda_chg', 0):+.1f}%**, Long Thành năm 3+.
+                - EV/EBITDA: **{scenario_data['positive'][-1]:.1f}x** (cuối kỳ).
+                
+                ---
+                *ε_oil = {sp.get('e_oil', 0):.2f}% · ε_fx = {sp.get('e_fx', 0):.2f}%*
                 """)
                 
             with col_sc2:
                 fig_sc = go.Figure()
                 fig_sc.add_trace(go.Scatter(x=scenario_data['years'], y=scenario_data['base'], 
-                                            name='Cơ sở', line=dict(color=COLORS['cyan'], width=3)))
+                                            name='Cơ sở', line=dict(color=COLORS['cyan'], width=3),
+                                            mode='lines+markers', marker=dict(size=7)))
                 fig_sc.add_trace(go.Scatter(x=scenario_data['years'], y=scenario_data['negative'], 
-                                            name='Tiêu cực', line=dict(color=COLORS['red'], width=3, dash='dot')))
+                                            name='Tiêu cực', line=dict(color=COLORS['red'], width=3, dash='dot'),
+                                            mode='lines+markers', marker=dict(size=7, symbol='triangle-down')))
                 fig_sc.add_trace(go.Scatter(x=scenario_data['years'], y=scenario_data['positive'], 
-                                            name='Tích cực', line=dict(color=COLORS['green'], width=4)))
+                                            name='Tích cực', line=dict(color=COLORS['green'], width=4),
+                                            mode='lines+markers', marker=dict(size=7, symbol='triangle-up')))
                 
+                latest_yr = scenario_data['years'][0]
                 fig_sc.update_layout(
-                    title='Dự phóng EV/EBITDA theo các kịch bản (2023-2028)',
+                    title=f'Dự phóng EV/EBITDA tích hợp Ma trận 3b + Log-Log ({latest_yr}–{scenario_data["years"][-1]})',
                     xaxis_title='Năm', yaxis_title='EV/EBITDA (x)',
                     **DARK_TEMPLATE,
                     legend=dict(orientation='h', y=-0.2)

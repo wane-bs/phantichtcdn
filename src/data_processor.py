@@ -96,6 +96,44 @@ class DataProcessor:
             
         return self.dataframes
 
+    def load_macro_data(self, macro_path):
+        if not os.path.exists(macro_path):
+            print(f"Lưu ý: Không tìm thấy file vĩ mô {macro_path}")
+            return
+            
+        try:
+            df_oil = pd.read_excel(macro_path, sheet_name='oil')
+            df_fx = pd.read_excel(macro_path, sheet_name='exchnage rate')
+            
+            # Lọc năm
+            df_oil = df_oil[df_oil['Năm'].notna()]
+            df_fx = df_fx[df_fx['Năm'].notna()]
+            df_oil['Năm'] = df_oil['Năm'].astype(int).astype(str)
+            df_fx['Năm'] = df_fx['Năm'].astype(int).astype(str)
+            
+            df_merge = pd.merge(df_oil[['Năm', 'Nhiên liệu Jet A1 (Avg)']], 
+                                df_fx[['Năm', 'Tỷ giá USD/VND (Ước tính)']], 
+                                on='Năm', how='outer')
+            
+            def format_fx(v):
+                try:
+                    f = float(v)
+                    return f * 1000 if f < 1000 else f
+                except:
+                    return np.nan
+                    
+            df_merge['Tỷ giá USD/VND (Ước tính)'] = df_merge['Tỷ giá USD/VND (Ước tính)'].apply(format_fx)
+            df_merge.rename(columns={
+                'Năm': 'Year',
+                'Nhiên liệu Jet A1 (Avg)': 'Oil_Price',
+                'Tỷ giá USD/VND (Ước tính)': 'FX_Rate'
+            }, inplace=True)
+            
+            self.dataframes['MACRO_DATA'] = df_merge
+        except Exception as e:
+            print(f"Lỗi đọc file macro excel: {e}")
+
+
     def save_outputs(self, out_dir="output/1_processed"):
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
@@ -110,7 +148,8 @@ if __name__ == "__main__":
     # Test read
     processor = DataProcessor("data/hvn_fixed.xlsx")
     dfs = processor.load_and_normalize()
-    for name, df in dfs.items():
+    processor.load_macro_data("data/oil&exchange_rate.xlsx")
+    for name, df in processor.dataframes.items():
         print(f"--- {name} ---")
         print(f"Columns: {df.columns.tolist()}")
         print(df.head(3))

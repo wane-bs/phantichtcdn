@@ -13,7 +13,7 @@ Tài liệu này chi tiết hóa toàn bộ các công thức, logic tính toán
 | :--- | :--- | :--- |
 | **DSCR** | $CFO / (Lãi\ vay + Nợ\ ngắn\ hạn)$ | CF, IS, BS |
 | **Stressed DSCR** | $(CFO \times 0.7) / (Lãi\ vay \times 1.2 + Nợ\ ngắn\ hạn)$ | Giả lập kịch bản sốc |
-| **Liquidity Runway** | $Tiền\ mặt / (SG\&A + Lãi\ vay) / 12$ | BS, IS (Số tháng sinh tồn) |
+| **Liquidity Runway** | $(Tiền\ mặt + ĐT\ ngắn\ hạn) /( (SG\&A + Lãi\ vay) / 12 )$ | BS, IS (Số tháng sinh tồn) |
 | **FCFF** | $CFO - Tiền\ mua\ TSCĐ\ (Capex)$ | CF |
 | **FCFE** | $FCFF - Lãi\ vay + (Vay\ mới - Trả\ nợ\ gốc)$ | CF, IS |
 | **CFO / Gross Debt** | $CFO / (Nợ\ ngắn\ hạn + Nợ\ dài\ hạn)$ | CF, BS |
@@ -47,13 +47,50 @@ $$ROIC = NOPAT\ Margin \times IC\ Turnover$$
 ---
 
 ## 3. Chỉ số Cảnh báo Bất thường (Anomaly Scores)
-Đo lường rủi ro gian lận và xác suất phá sản.
+Đo lường rủi ro gian lận và xác suất phá sản. Hệ thống áp dụng 3 mô hình định lượng chuẩn quốc tế:
 
-| Chỉ số | Mô hình | Ý nghĩa |
-| :--- | :--- | :--- |
-| **Beneish M-Score** | 8 nhân tố (DSRI, GMI, AQI, SGI, DEPI, SGAI, TATA, LVGI) | Phát hiện thao túng lợi nhuận. Ngưỡng cảnh báo: $M > -2.22$ |
-| **Altman Z''-Score** | Mô hình 4 nhân tố cho thị trường mới nổi | Dự báo rủi ro phá sản. Ngưỡng nguy hiểm: $Z < 1.1$ |
-| **Sloan Accruals** | $(NI - OCF - ICF) / Tổng\ TS$ | Đo lường chất lượng lợi nhuận qua dồn tích. Rủi ro khi $> 25\%$ |
+### 3.1. Beneish M-Score (Phát hiện Thao túng Lợi nhuận)
+Phương trình hồi quy tuyến tính với 8 biến số:
+$$M = -4.84 + 0.92 \cdot DSRI + 0.528 \cdot GMI + 0.404 \cdot AQI + 0.892 \cdot SGI + 0.115 \cdot DEPI - 0.172 \cdot SGAI + 4.679 \cdot TATA - 0.327 \cdot LVGI$$
+
+**Trong đó:**
+- **DSRI (Days Sales in Receivables Index):** Tỷ lệ Phải thu/Doanh thu kỳ này so với kỳ trước. ($>1$ chỉ ra khả năng ghi nhận doanh thu ảo).
+- **GMI (Gross Margin Index):** Tỷ lệ Biên lãi gộp kỳ trước so với kỳ này. ($>1$ cho thấy biên lợi nhuận đang suy giảm, tạo áp lực "làm mượt" con số).
+- **AQI (Asset Quality Index):** Tỷ lệ tài sản không sinh lời (ngoài TSCĐ và TSNH) so với Tổng TS.
+- **SGI (Sales Growth Index):** Tốc độ tăng trưởng doanh thu.
+- **DEPI (Depreciation Index):** Tỷ lệ khấu hao kỳ trước so với kỳ này. ($>1$ chỉ ra việc kéo dài thời gian khấu hao để tăng lợi nhuận).
+- **SGAI (SGA Expenses Index):** Tỷ lệ chi phí bán hàng & quản lý trên doanh thu.
+- **LVGI (Leverage Index):** Tỷ lệ nợ trên tổng tài sản.
+- **TATA (Total Accruals to Total Assets):** $(LNST - CFO) / Tổng\ TS$.
+
+> [!WARNING]
+> **Ngưỡng:** $M > -2.22$ cho thấy khả năng cao báo cáo tài chính đã bị thao túng.
+
+### 3.2. Altman Z''-Score (Mô hình cho Thị trường Mới nổi)
+Áp dụng phiên bản dành cho doanh nghiệp phi sản xuất và thị trường mới nổi (Emerging Markets):
+$$Z'' = 3.25 + 6.56 \cdot X_1 + 3.26 \cdot X_2 + 6.72 \cdot X_3 + 1.05 \cdot X_4$$
+
+**Trong đó:**
+- **$X_1$ (Working Capital / Total Assets):** Khả năng thanh khoản.
+- **$X_2$ (Retained Earnings / Total Assets):** Tích lũy lợi nhuận (Hệ thống dùng VCSH làm đại diện do đặc thù dữ liệu).
+- **$X_3$ (EBIT / Total Assets):** Hiệu suất sinh lời trên tài sản.
+- **$X_4$ (Equity / Total Liabilities):** Cấu trúc vốn (VCSH / Tổng nợ phải trả).
+
+> [!IMPORTANT]
+> **Phân vùng rủi ro:**
+> - **$Z < 1.1$:** Vùng Nguy hiểm (Distressed) - Nguy cơ phá sản cao.
+> - **$1.1 \leq Z \leq 2.6$:** Vùng Xám (Grey) - Cần theo dõi chặt chẽ.
+> - **$Z > 2.6$:** Vùng An toàn (Safe).
+
+### 3.3. Sloan Accruals (Chất lượng Dòng tiền)
+Đo lường mức độ chênh lệch giữa lợi nhuận kế toán và dòng tiền thực tế:
+$$Sloan\ Ratio = \frac{NI - OCF - ICF}{Total\ Assets}$$
+- **NI:** Lợi nhuận thuần.
+- **OCF:** Dòng tiền từ HĐKD.
+- **ICF:** Dòng tiền từ HĐ Đầu tư.
+
+> [!NOTE]
+> **Ngưỡng:** Tỷ lệ tuyệt đối $> 10\%$ bắt đầu có dấu hiệu cảnh báo; $> 25\%$ là rủi ro nghiêm trọng về chất lượng lợi nhuận.
 
 ---
 
@@ -85,12 +122,12 @@ Phân tích mối quan hệ giữa doanh thu, cấu trúc chi phí và lợi nhu
 | Chỉ số | Công thức tính toán | Nguồn dữ liệu |
 | :--- | :--- | :--- |
 | **Doanh thu thuần** | Doanh số bán hàng và cung cấp dịch vụ sau giảm trừ | `IS` (Dòng 4) |
-| **Tổng thu nhập** | $Doanh\ thu\ thuần + Thu\ nhập\ tài\ chính + Thu\ nhập\ khác$ | `IS` (Dòng 4, 7, 14) |
-| **Biến phí (VC)** | $Giá\ vốn\ hàng\ bán - Khấu\ hao$ (Ước tính) | `IS`, `CF` |
+| **Biến phí (VC)** | $Giá\ vốn\ hàng\ bán - Khấu\ hao$ (Ước tính cốt lõi) | `IS`, `CF` |
 | **Định phí (FC)** | $Chi\ phí\ Bán\ hàng + Chi\ phí\ Quản\ lý + Khấu\ hao$ | `IS`, `CF` |
 | **Biên đóng góp (CM)** | $Doanh\ thu\ thuần - Biến\ phí$ | Tính toán |
-| **Điểm hòa vốn (BEP)** | $FC / (CM / Doanh\ thu\ thuần)$ | Tính toán |
-| **DOL** | $\% \Delta EBIT / \% \Delta Doanh\ thu$ | `IS` |
+| **BEP (Hoạt động)** | $FC / (CM / Doanh\ thu\ thuần)$ | EBIT-based BEP |
+| **BEP (Phục vụ nợ)** | $(FC + Nợ\ ngắn\ hạn) / (CM / Doanh\ thu\ thuần)$ | Debt-Service BEP |
+| **DOL** | $\% \Delta EBIT / \% \Delta Doanh\ thu$ | Operating Leverage |
 
 ### 7.1. Bản chất Toán học của Đòn bẩy & Biên EBIT
 Để giải thích tại sao lợi nhuận không tăng vọt vô hạn và DOL biến động mạnh, hệ thống áp dụng các mô hình hàm số sau:
@@ -115,6 +152,16 @@ $$DOL = \frac{1}{1 - \frac{F}{R(1-v)}}$$
 DOL âm xảy ra khi tử số ($\% \Delta EBIT$) và mẫu số ($\% \Delta Doanh\ thu$) ngược chiều:
 *   **Trường hợp 2015 (DOL -6.1x):** Doanh thu giảm nhưng EBIT tăng mạnh nhờ biến phí (giá dầu) giảm sâu.
 *   **Trường hợp 2019 (DOL -16.7x):** Doanh thu tăng nhưng EBIT giảm mạnh do cạnh tranh làm giảm Yield (giá vé) hoặc chi phí cấu trúc tăng nhanh hơn doanh thu.
+
+### 7.2. Hồi quy Log-Log & Bóc tách Đòn bẩy Cốt lõi
+Để bóc tách chính xác Đòn bẩy hoạt động/tài chính cốt lõi (Core DOL & DFL) khỏi những nhiễu loạn từ cú sốc nhiên liệu, tỷ giá và sự đứt gãy kinh tế (như đại dịch Covid-19), hệ thống vận hành thuật toán Hồi quy đa biến Log-Log:
+$$\ln(Total\ Cost) = \alpha + \beta_Q \ln(Revenue) + \beta_{Oil} \ln(Oil) + \beta_{FX} \ln(FX) + \gamma \cdot Covid\_Dummy$$
+
+*   **Ý nghĩa các hệ số đo lường:** $\beta_{Oil}$ ($\varepsilon_{oil}$) và $\beta_{FX}$ ($\varepsilon_{fx}$) chính là độ co giãn của chi phí đối với biến động dài hạn (15 năm).
+*   **Cơ chế Đòn bẩy Cốt lõi (Core DOL/DFL):** 
+    *   $DOL_{core} = \frac{Q - \beta_Q \cdot TC}{EBIT}$ (Trong đó $\beta_Q$ là độ co giãn chi phí theo quy mô).
+    *   Giúp loại bỏ hoàn toàn các "nhiễu" vĩ mô để nhìn thấy sức mạnh vận hành thực chất của bộ máy HVN.
+*   **Data Pipeline (Luồng cấp dữ liệu tự động):** Các biến số vĩ mô lịch sử được xử lý từ đầu vào gốc `oil&exchange_rate.xlsx` bằng `data_processor.py`. Hệ thống tự động đồng bộ hóa kết quả hồi quy vào các biểu đồ nhạy cảm (3b) và kịch bản (3c).
 
 ---
 
@@ -166,10 +213,12 @@ Mô phỏng tác động trực tiếp của hai biến số vĩ mô quan trọn
 *   **Đầu ra:** Ma trận biến động EV/EBITDA và Lợi nhuận ròng (Net Profit) theo lưới (Oil, FX).
 
 ## 11. Dự phóng Kịch bản (Scenario Analysis)
-Mô phỏng 3 kịch bản tiến hóa của doanh nghiệp đến năm 2028:
-*   **Cơ sở (Base):** Tăng trưởng EBITDA 7%, giá dầu ổn định.
-*   **Tiêu cực (Negative):** Sốc chi phí đầu vào hoặc sụt giảm nhu cầu vận tải.
-*   **Tích cực (Positive):** Đi vào hoạt động sân bay Long Thành (2026), phục hồi thị trường quốc tế vượt kỳ vọng.
+Hệ thống thoát bỏ cơ chế dự báo định tính (hardcode) bằng cách thiết lập cấu trúc **Dự báo Hội tụ (Quantitative Convergence Analysis)**:
+*   **Điểm neo (Anchor points):** Dữ liệu EBITDA năm đầu ($T+1$) của kịch bản được lấy trực tiếp từ **Ma trận Nhạy cảm Cấu trúc (Mục 10)**. Ví dụ: Kịch bản Tiêu cực tự động kéo số liệu sụt giảm EBITDA từ ô (Oil +$20, FX +5%) trong ma trận.
+*   **Quỹ đạo (Paths):** Toàn bộ quỹ đạo 5 năm được tính toán lại theo biên lợi nhuận cấu trúc (Log-Log) và giả định dịch chuyển vĩ mô:
+    *   **Cơ sở (Base):** Dầu và Tỷ giá biến động theo kỳ vọng trung bình, doanh thu tăng trưởng tự nhiên.
+    *   **Tiêu cực (Negative):** Hiệu ứng "kép" từ sốc chi phí tức thời và gánh nặng nợ vay gia tăng do VND mất giá (hiệu chỉnh theo $\varepsilon_{fx}$).
+    *   **Tích cực (Positive):** Tận dụng "Trần lợi nhuận" mới khi giá dầu giảm và cú hích công suất từ hạ tầng Long Thành (từ 2026).
 
 ## 13. Quy đổi Giá mục tiêu (Target Price Conversion)
 Hệ thống thực hiện phép tính quy đổi ngược từ Giá trị Doanh nghiệp (EV) sang giá mỗi cổ phiếu để đưa ra khuyến nghị cụ thể.
@@ -228,7 +277,7 @@ Trọng tâm: Đánh giá sức khỏe tài chính cơ bản, cơ cấu thanh kh
    - **Diễn biến tự phục vụ nợ (DSCR Bars & Stress Line):** Căn cứ tỷ suất đảm bảo nợ, áp dụng kịch bản sốc 30% sụt giảm từ dòng tiền cốt lõi (CFO) kết hợp tăng 20% chi phí lãi vay (Interest).
    - **Khoảng cách sinh tồn (Liquidity Runway Bars):** 
      - **Công thức mô hình:** $Runway_{tháng} = \frac{Tiền\ mặt\ +\ Đầu\ tư\ ngắn\ hạn}{Chi\ phí\ cố\ định\ hàng\ tháng}$
-     - Cho biết doanh nghiệp có thể hấp thụ cú sốc doanh thu ngừng trệ trong bao nhiêu tháng tiếp nối (Thước đo Baseline: Vùng xanh $\geq 12$, Vùng cảnh báo vàng 6-12).
+      - *Trong đó:* Chi phí cố định hàng tháng = $(Chi\ phí\ Bán\ hàng + Chi\ phí\ QLDN + Lãi\ vay) / 12$. Cho biết doanh nghiệp có thể hấp thụ cú sốc doanh thu ngừng trệ trong bao nhiêu tháng tiếp nối.
 
 ## Tab 2: Chất lượng BCTC (Anomaly)
 Trọng tâm: Đo lường chất lượng lợi nhuận và dấu hiệu rủi ro.
@@ -253,17 +302,19 @@ Trọng tâm: Đúc kết phương hướng kinh doanh và đưa ra khuyến ngh
 Trọng tâm: Đánh giá biên lợi nhuận ròng, mô hình chi phí và cơ cấu phân tách DuPont.
 
 1. **Đòn bẩy Hoạt động (Operating Leverage & Margin Gap)**
-   - **Khoảng hở hòa vốn (Filled Area Chart):** $Doanh\ thu\ thuần - |Giá\ vốn| = Lãi\ gộp$. Diện tích được tô màu biểu thị phần đệm lợi nhuận.
-   - **Đòn bẩy Hoạt động (Combo Bar-Line, Scatter threshold):** Kết hợp cột doanh thu, cột định phí, và Lợi nhuận EBIT thực tế bằng đường nét kẻ.
-     - **Định phí phân bổ (FC):** $\approx Khấu\ hao\ TSCĐ + Chi\ phí\ bán\ hàng + Chi\ phí\ quản\ lý$
-     - **Lợi nhuận EBIT thực tế (tỷ VND)**: Thể hiện số tiền lợi nhuận cốt lõi kiếm được. Điểm bứt phá mạnh nhất về giá trị tuyệt đối nằm ở khoảnh khắc doanh thu vượt điểm hòa vốn.
-     - **Cơ chế DOL Index:** $DOL_{n+1} = \frac{\Delta EBIT\%}{\Delta Doanh\ thu\%}$ — Độ nhạy mỗi $1\%$ tăng doanh thu lên $EBIT$.
-2. **Khả năng Sinh lời & P/E, P/B (Multi-line Chart)**
-   - Đường khuynh hướng thể hiện Tỷ suất Biên, kèm mốc hình chữ nhật khối cho vùng kháng cự $EV/EBITDA$ hoặc $EV/Revenue$.
-3. **Phân rã Biên lợi nhuận cấu trúc (DuPont Subplots / Secondary Y-Axis)**
-   - Trực quan hóa tương quan đóng góp vào $ROE$: Mở rộng $ROS$, $Asset\ Turnover$, $Financial\ Leverage$ (Bar) tương thích xu hướng quy chiếu $ROE$ biểu thị qua trục Secondary Y (Đường vàng đứt nét).
-4. **Phân tách Thay đổi Chuỗi (Best-fit OLS Factor Impact / Grouped Bar)**
-   - **Mô hình Bar:** Chỉ định số điểm phần trăm $\%\ pts$ mà mỗi yếu tố (ví dụ NOPAT Margin, IC Turnover) bù đắp ròng vào $\Delta ROIC$ toàn diện. Dữ liệu chuẩn được phân vùng riêng rẽ bằng tổ hợp "Best Chain OLS".
+   - **Khoảng hở hòa vốn (Filled Area Chart):** Trực quan hóa phần đệm an toàn giữa Doanh thu và Giá vốn.
+   - **Đòn bẩy Hoạt động (Combo Bar-Line):** Kết hợp Doanh thu, Định phí và EBIT thực tế. Hiển thị DOL annotations tại từng năm để nhận diện vùng rủi ro.
+2. **Ma trận Nhạy cảm: Dịch chuyển Điểm hòa vốn & Đòn bẩy (Macro Sensitivity)**
+   - **Mô hình Mỏ neo (Base 2025):** Sử dụng các tham số nền: Giá dầu Jet A1 ($90) và Tỷ giá USD/VND ($26,300$).
+   - **Cơ chế truyền dẫn:**
+     - Sốc Giá dầu $\rightarrow$ Biến phí (Variable Costs) thông qua $\varepsilon_{oil}$.
+     - Sốc Tỷ giá $\rightarrow$ Định phí (Fixed Costs - Leases/Debt) thông qua $\varepsilon_{fx}$.
+   - **Đầu ra:** Mô phỏng sự dịch chuyển của đường cong Biên EBIT và Điểm hòa vốn dưới tác động của các cú sốc vĩ mô.
+3. **Phân rã Biên lợi nhuận cấu trúc (DuPont Subplots)**
+   - Trực quan hóa đóng góp vào ROA, ROIC.
+   - **Lưu ý:** Hệ thống tự động vô hiệu hóa phân rã ROE khi VCSH âm để bảo vệ tính chính xác của báo cáo.
+4. **Phân tách Thay đổi Chuỗi (Best-fit OLS Factor Impact)**
+   - Sử dụng thuật toán OLS để định lượng mức đóng góp (%pts) của từng nhân tố tài chính vào sự thay đổi lợi nhuận ròng.
 
 ## Tab 5: Định giá Doanh nghiệp (Enterprise Value Framework)
 Trọng tâm: Trực quan hóa giá trị doanh nghiệp, quy hoạch kỳ vọng cơ sở và mô phỏng tác động vi mô/vĩ mô. Bằng phương pháp **Định giá Doanh nghiệp EV** thay vì vốn dĩ truyền thống (DCF thuần) để giải quyết bất ổn cho HVN.
@@ -274,13 +325,26 @@ Trọng tâm: Trực quan hóa giá trị doanh nghiệp, quy hoạch kỳ vọn
    - **Phương trình mô phỏng:** 
      - Dải đắt đỏ: $+1\sigma\ \&\ +2\sigma$. Mức kỳ vọng chung (Mean). Dải giá trũng: $-1\sigma\ \&\ -2\sigma$.
      - Khối tham số **Band Position**: $\frac{EV/EBITDA\ hiện\ tại - (\mu - \sigma)}{2\sigma}$
-3. **Ma trận Định giá DCF (Terminal Value - Heatmap Box)**
-   - Trục hoành: Tăng trưởng $EBITDA\ Growth\ (\%)$ ; Trục tung: $WACC\ Cấu\ thành\ (\%)$. Giao diện Heatmap cung cấp độ nhạy Enterprise Value khi định lượng tham số. Terminal Multiple tự động đồng bộ hóa $Median$.
+3. **Ma trận Định giá DCF (WACC-g Heatmap)**
+   - Heatmap độ nhạy Enterprise Value khi thay đổi giả định tăng trưởng và chi phí vốn.
+   - **Hệ số Bội số mục tiêu (Terminal Multiple):** Tự động đồng bộ hóa với giá trị Trung vị (Median) lịch sử để đảm bảo tính khách quan.
 4. **Ma trận Nhạy cảm Cấu trúc - Vĩ mô Oil & FX (Live Score & Heatmap Grid)**
    - Lõi tham số bù dịch $VND/USD$ theo nợ dư USD hiện diện thực. Lõi rủi ro Giá dầu Jet A1 phân vùng theo Opex. 
    - **Live Impact Output:** Kịch bản biến động $\pm 1\%$ FX hay $\pm\$10$ Jet A1 trực tiếp báo lãi/lỗ kỳ hạn qua Indicator Metric, bổ trợ bảng đo định mức (EV/EBITDA hoặc Lợi nhuận ròng).
 5. **Kịch bản Định giá Phân kỳ (Scenario Analysis / Multi-line Area)**
-   - Dự án 3 rẽ nhanh: Base/Positive/Negative ($EV/EBITDA$) chạy tiến định hướng đến $2028$. 
+   - Dự kiến 3 lộ trình tiến hóa chuẩn xác: Base/Positive/Negative ($EV/EBITDA$) chạy tiến định hướng đến $2028$. 
+   - **Đặc trưng:** Toàn bộ kịch bản được "neo" (quant-anchored) vào Ma trận Nhạy cảm 3b và kết quả Hồi quy Log-Log. Người dùng có thể quan sát sự phân kỳ của hệ số định giá khi cấu trúc chi phí thay đổi theo kịch bản vĩ mô.
 6. **Football Field Chart (Horizontal Oriented Bar / Biểu đồ hộp trục ngang)**
    - **Cấu trúc:** Nhóm hợp nhất dải định giá biên độ Min-Max theo các công cụ đo lường quy hồi lịch sử (EV/EBITDA $\pm1\sigma$) và DCF Valuation. Biểu diễn độ vươn (Gap) Min-Max nằm trên lưới ngang giá trị Enterprise Value tuyệt đối. 
-   - **Tích phân Mục tiêu:** Hiển thị mốc "EV Hiện Tại" song song với bộ chuyển hóa (Conversion Metric Card) ra $Target\ Price\ (VND/$cổ phiếu$)$ tại phân vùng giao diện UI, dựa theo phép trừ Nợ ròng và Lợi ích cổ đông thiểu số khỏi Enterprise Value.
+   - **Tích phân Mục tiêu:** Hiển thị mốc "EV Hiện Tại" song song với bộ chuyển hóa (Conversion Metric Card) ra $Target\ Price\ (VND/cổ phiếu)$ tại phân vùng giao diện UI, dựa theo phép trừ Nợ ròng và Lợi ích cổ đông thiểu số khỏi Enterprise Value.
+
+---
+
+# PHẦN IV: TRIẾT LÝ QUẢN TRỊ TRUNG TÂM
+
+Để giải thích các biến động ngược chiều và giới hạn biên lợi nhuận, hệ thống áp dụng bộ khung lý thuyết **"Convergence to Margin Ceiling"**:
+
+1. **Sự dịch chuyển BEP:** Điểm hòa vốn không cố định mà dịch chuyển "tịnh tiến sang phải" khi Định phí ($F$) tăng (đội bay mới) hoặc Biến phí ($v$) tăng (Tỷ giá/Dầu).
+2. **Hệ số DOL động:** Đòn bẩy cao nhất khi doanh nghiệp tiệm cận BEP (vùng dốc trên biểu đồ) và giảm dần về 1.0x khi doanh thu vượt xa BEP (vùng thoải).
+3. **Trần Lợi nhuận (Margin Ceiling):** Biên EBIT không tăng vô hạn mà tiệm cận mốc $(1 - v)$. Tại HVN, do biến phí chiếm trọng số lớn, trần này thường giới hạn ở mức 20-25%.
+4. **Chiến lược "Nâng trần":** Nâng đường cong biên lợi nhuận thông qua quản trị Yield, tối ưu hóa Fleet và sử dụng các công cụ Hedging để bảo vệ cấu trúc chi phí trước rủi ro vĩ mô.

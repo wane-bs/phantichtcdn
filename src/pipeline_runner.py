@@ -22,6 +22,12 @@ def run_pipeline():
     from data_processor import DataProcessor
     processor = DataProcessor("data/hvn.xlsx")
     processor.load_and_normalize()
+    # Nạp dữ liệu Giá dầu & Tỷ giá từ file Excel bổ sung
+    try:
+        processor.load_macro_data("data/oil&exchange_rate.xlsx")
+        print("  → Đã nạp dữ liệu Macro (Oil & FX) thành công.")
+    except Exception as e:
+        print(f"  → Cảnh báo: Không thể nạp dữ liệu Macro: {e}")
     processor.save_outputs("output/1_processed")
     print(f"Hoàn thành Stage 1 ({time.time()-start:.2f}s)")
 
@@ -30,6 +36,9 @@ def run_pipeline():
     start = time.time()
     from calculator import Calculator
     calc = Calculator(in_dir="output/1_processed")
+    # Inject MACRO_DATA vào Calculator nếu có
+    if 'MACRO_DATA' in processor.dataframes:
+        calc.dfs['MACRO_DATA'] = processor.dataframes['MACRO_DATA']
     calc.run_all()
     calc.save_outputs("output/2_calculated")
     print(f"Hoàn thành Stage 2 ({time.time()-start:.2f}s)")

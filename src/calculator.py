@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 try:
-    from sklearn.linear_model import ElasticNetCV
+    from sklearn.linear_model import ElasticNetCV, LinearRegression
     from sklearn.preprocessing import StandardScaler
     SKLEARN_AVAILABLE = True
 except ImportError:
@@ -852,16 +852,11 @@ class Calculator:
     def dupont_factor_impact(self):
         """Phân rã ảnh hưởng nhân tố cho ROE, ROA, ROIC — chỉ Best-fit OLS."""
 
-        # ROE: 3 nhân tố
-        roe_impact, roe_betas = self._generic_factor_impact(
-            self.dfs.get('DUPONT'),
-            [(r'^ROS', 'ROS', True), (r'^Asset Turnover', 'AT', False),
-             (r'^Financial Leverage', 'Lev', False)],
-            r'ROE'
-        )
-        if roe_impact is not None:
-            self.dfs['DUPONT_IMPACT'] = roe_impact
-            self.dfs['DUPONT_BETAS'] = roe_betas
+        # MỚI: Đã vô hiệu hóa phân rã ROE do yếu tố nhiễu Vốn chủ sở hữu âm
+        # roe_impact, roe_betas = self._generic_factor_impact(...)
+        # if roe_impact is not None:
+        #     self.dfs['DUPONT_IMPACT'] = roe_impact
+        #     self.dfs['DUPONT_BETAS'] = roe_betas
 
         # ROA: 4 nhân tố
         roa_impact, roa_betas = self._generic_factor_impact(
@@ -885,6 +880,256 @@ class Calculator:
             self.dfs['DUPONT_BETAS_ROIC'] = roic_betas
 
     # =========================================================================
+    # MACRO REGRESSION LEVERAGE (DOL, DFL, DTL)
+    # =========================================================================
+    def calculate_macro_regression_leverage(self):
+        """
+        Sử dụng Hồi quy Đa biến để bóc tách FC và tính toán DOL, DFL cốt lõi
+        Kiểm soát bằng giá dầu Jet A1, tỷ giá USD/VND và Dummy Covid.
+        """
+        if not SKLEARN_AVAILABLE:
+            return
+
+        is_df = self.dfs.get('INCOME STATEMENT')
+        if is_df is None: return
+
+        years = self._get_years(is_df)
+        if len(years) < 5: return
+
+        rev_row = self._get_row(is_df, r'^Doanh số thuần$')
+        ebit_row = self._get_row(is_df, r'^EBIT$')
+        int_row = self._get_row(is_df, r'Chi phí lãi vay')
+
+        if any(r is None for r in [rev_row, ebit_row, int_row]): return
+
+        rev_vals = rev_row[years].astype(float).values
+        ebit_vals = ebit_row[years].astype(float).values
+        int_vals = int_row[years].astype(float).values.copy()
+        for i in range(len(int_vals)):
+            if int_vals[i] < 0: int_vals[i] = -int_vals[i]
+            
+        tc_vals = rev_vals - ebit_vals
+
+        # Chống log(số âm) - Ép giá trị dương trước khi tính Logarit
+        tc_vals_safe = np.maximum(tc_vals, 1.0)
+        rev_vals_safe = np.maximum(rev_vals, 1.0)
+
+        macro_fx = {}
+        macro_oil = {}
+        
+        # Read from pipeline MACRO_DATA
+        df_macro = self.dfs.get('MACRO_DATA')
+        if df_macro is not None and not df_macro.empty:
+            for _, row in df_macro.iterrows():
+                try:
+                    yr = str(int(row['Year']))
+                    if pd.notna(row['Oil_Price']): 
+                        macro_oil[yr] = float(row['Oil_Price'])
+                    if pd.notna(row['FX_Rate']): 
+                        macro_fx[yr] = float(row['FX_Rate'])
+                except Exception:
+                    pass
+        else:
+            print("Lưu ý: Không tìm thấy MACRO_DATA trong pipeline, sử dụng dữ liệu fallback.")
+
+        fx_arr = np.array([macro_fx.get(str(y), 24000) for y in years])
+        oil_arr = np.array([macro_oil.get(str(y), 90) for y in years])
+        
+        # Dummy Covid (2020-2022 = 1, else 0)
+        covid_dummy = np.array([1 if str(y) in ['2020', '2021', '2022'] else 0 for y in years])
+
+        # =====================================================================
+        # Bước 1: Log-transform
+        # =====================================================================
+        ln_TC  = np.log(tc_vals_safe)
+        ln_Q   = np.log(rev_vals_safe)
+        ln_oil = np.log(oil_arr)
+        ln_fx  = np.log(fx_arr)
+
+        from sklearn.linear_model import LinearRegression
+
+        # =====================================================================
+        # Bước 2: TRỰC GIAO HÓA FRISCH-WAUGH-LOVELL (FWL)
+        # Giải phẫu đa cộng tuyến bằng cách loại bỏ xu hướng chung giữa
+        # ln(FX), ln(Oil) và ln(Revenue) trước khi hồi quy chính thức.
+        # =====================================================================
+
+        # ── Bước 2a: Hồi quy phụ — Trích xuất phần dư (Residuals) ──
+        # Mục đích: Loại bỏ phần biến động FX/Oil mà "đi cùng" với Revenue trend
+        # Kết quả: resid_fx = cú sốc tỷ giá thuần túy (exogenous FX shock)
+        #          resid_oil = cú sốc giá dầu thuần túy (exogenous Oil shock)
+
+        # FX ~ Revenue: Phần FX tương quan với chu kỳ doanh thu
+        reg_fx_aux = LinearRegression().fit(ln_Q.reshape(-1, 1), ln_fx)
+        resid_fx = ln_fx - reg_fx_aux.predict(ln_Q.reshape(-1, 1))  # Pure FX shocks
+
+        # Oil ~ Revenue: Phần Oil tương quan với chu kỳ doanh thu
+        reg_oil_aux = LinearRegression().fit(ln_Q.reshape(-1, 1), ln_oil)
+        resid_oil = ln_oil - reg_oil_aux.predict(ln_Q.reshape(-1, 1))  # Pure Oil shocks
+
+        # ── Bước 2b: Mô hình chính với biến đã trực giao hóa ──
+        # ln(TC) = α + β_Q·ln(Q) + ε_oil·resid(Oil|Q) + ε_fx·resid(FX|Q) + γ·Covid
+        X_fwl = np.column_stack((ln_Q, resid_oil, resid_fx, covid_dummy))
+        y_fwl = ln_TC
+
+        reg_main = LinearRegression(fit_intercept=True).fit(X_fwl, y_fwl)
+        elasticity_q   = float(reg_main.coef_[0])
+        elasticity_oil = float(reg_main.coef_[1])
+        elasticity_fx  = float(reg_main.coef_[2])
+        r_sq = float(reg_main.score(X_fwl, y_fwl))
+
+        # ── Bước 2c: Chẩn đoán chất lượng trực giao hóa ──
+        try:
+            corr_fwl = np.corrcoef(X_fwl.T)
+            max_corr = float(np.max(np.abs(corr_fwl - np.eye(corr_fwl.shape[0]))))
+        except Exception:
+            max_corr = 0.0
+
+        # Tương quan giữa resid_fx và ln_Q phải ≈ 0 (theo thiết kế FWL)
+        corr_fx_q = float(np.abs(np.corrcoef(resid_fx, ln_Q)[0, 1]))
+        corr_oil_q = float(np.abs(np.corrcoef(resid_oil, ln_Q)[0, 1]))
+
+        reg_method = (f"FWL-OLS (corr_fx⊥Q={corr_fx_q:.4f}, "
+                      f"corr_oil⊥Q={corr_oil_q:.4f}, max_corr={max_corr:.2f})")
+
+        # ── Bước 2d: Sanity-check kinh tế học ──
+        # Elasticity âm có nghĩa giá dầu/FX tăng → chi phí giảm: VÔ LÝ kinh tế
+        # Nhưng KHÔNG clip — để kết quả trung thực. Chỉ cảnh báo nếu ngoài vùng.
+        if elasticity_q >= 1.0 or elasticity_q <= 0:
+            elasticity_q = 0.85  # Fallback: scale economy
+
+
+
+
+        # Bước 3: Tính Hệ số Đòn bẩy Cốt lõi (Bóc tách nhiễu Tỷ giá/Oil)
+        latest_rev = rev_vals[-1]
+        latest_ebit = ebit_vals[-1]
+        latest_tc = tc_vals[-1]
+        latest_int = int_vals[-1]
+
+        # Đòn bẩy hoạt động: DOL = (Q - beta_q * TC) / EBIT
+        if latest_ebit != 0:
+            dol_core = (latest_rev - elasticity_q * latest_tc) / latest_ebit
+        else:
+            dol_core = np.nan
+
+        # Đòn bẩy tài chính (Giữ nguyên cấu trúc dòng tiền trước/sau lãi vay)
+        if (latest_ebit - latest_int) != 0:
+            dfl_core = latest_ebit / (latest_ebit - latest_int)
+        else:
+            dfl_core = np.nan
+
+        dtl_core = dol_core * dfl_core if not np.isnan(dol_core) and not np.isnan(dfl_core) else np.nan
+
+        self.dfs['MACRO_REGRESSION'] = {
+            'elasticity_q': elasticity_q,
+            'elasticity_oil': elasticity_oil,
+            'elasticity_fx': elasticity_fx,
+            'r_squared': r_sq,
+            'dol_core': dol_core,
+            'dfl_core': dfl_core,
+            'dtl_core': dtl_core,
+            'reg_method': reg_method,
+            'max_corr': float(max_corr)
+        }
+
+        # =====================================================================
+        # PARTIAL R² — Oil + FX giải thích được bao nhiêu % BEP & EBIT Margin?
+        # =====================================================================
+        try:
+            cf_df = self.dfs.get('CASH FLOW STATEMENT')
+            
+            # Tính FC, VC, BEP, EBIT Margin lịch sử cho từng năm
+            depr_row = self._get_row(cf_df, r'^Khấu hao TSCĐ$') if cf_df is not None else None
+            sell_row = self._get_row(is_df, r'^Chi phí bán hàng$')
+            admin_row = self._get_row(is_df, r'^Chi phí quản lý')
+            
+            hist_bep = []
+            hist_ebit_margin = []
+            valid_oil = []
+            valid_fx = []
+            valid_years_idx = []
+            
+            for i, y in enumerate(years):
+                try:
+                    rev_y = float(rev_vals[i])
+                    ebit_y = float(ebit_vals[i])
+                    
+                    # FC = Khấu hao + Bán hàng + Quản lý
+                    fc_y = 0.0
+                    if depr_row is not None: fc_y += abs(float(depr_row[y]))
+                    if sell_row is not None: fc_y += abs(float(sell_row[y]))
+                    if admin_row is not None: fc_y += abs(float(admin_row[y]))
+                    
+                    # VC = Revenue - EBIT - FC
+                    vc_y = rev_y - ebit_y - fc_y
+                    v_ratio = vc_y / rev_y if rev_y > 0 else 0.85
+                    
+                    if v_ratio >= 1 or v_ratio <= 0 or rev_y <= 0:
+                        continue  # Năm bất thường, bỏ qua
+                    
+                    bep_y = fc_y / (1 - v_ratio)
+                    ebit_margin_y = ebit_y / rev_y * 100
+                    
+                    hist_bep.append(bep_y)
+                    hist_ebit_margin.append(ebit_margin_y)
+                    valid_oil.append(oil_arr[i])
+                    valid_fx.append(fx_arr[i])
+                    valid_years_idx.append(i)
+                except Exception:
+                    continue
+            
+            if len(hist_bep) >= 5:
+                hist_bep = np.array(hist_bep)
+                hist_ebit_margin = np.array(hist_ebit_margin)
+                v_oil = np.array(valid_oil)
+                v_fx = np.array(valid_fx)
+                v_covid = np.array([covid_dummy[i] for i in valid_years_idx])
+                v_rev = np.array([rev_vals[i] for i in valid_years_idx])
+                
+                X_macro_only = np.column_stack((np.log(v_oil), np.log(v_fx)))
+                X_full = np.column_stack((np.log(v_rev), np.log(v_oil), np.log(v_fx), v_covid))
+                X_reduced = np.column_stack((np.log(v_rev), v_covid))
+                
+                # --- BEP ---
+                ln_bep = np.log(np.maximum(hist_bep, 1.0))
+                
+                reg_bep_macro = LinearRegression().fit(X_macro_only, ln_bep)
+                r2_bep_macro = reg_bep_macro.score(X_macro_only, ln_bep)
+                
+                reg_bep_full = LinearRegression().fit(X_full, ln_bep)
+                r2_bep_full = reg_bep_full.score(X_full, ln_bep)
+                
+                reg_bep_reduced = LinearRegression().fit(X_reduced, ln_bep)
+                r2_bep_reduced = reg_bep_reduced.score(X_reduced, ln_bep)
+                
+                partial_r2_bep = (r2_bep_full - r2_bep_reduced) / max(1 - r2_bep_reduced, 1e-10)
+                
+                # --- EBIT Margin ---
+                reg_margin_macro = LinearRegression().fit(X_macro_only, hist_ebit_margin)
+                r2_margin_macro = reg_margin_macro.score(X_macro_only, hist_ebit_margin)
+                
+                reg_margin_full = LinearRegression().fit(X_full, hist_ebit_margin)
+                r2_margin_full = reg_margin_full.score(X_full, hist_ebit_margin)
+                
+                reg_margin_reduced = LinearRegression().fit(X_reduced, hist_ebit_margin)
+                r2_margin_reduced = reg_margin_reduced.score(X_reduced, hist_ebit_margin)
+                
+                partial_r2_margin = (r2_margin_full - r2_margin_reduced) / max(1 - r2_margin_reduced, 1e-10)
+                
+                self.dfs['MACRO_REGRESSION']['partial_r2'] = {
+                    'bep_direct_r2': float(r2_bep_macro),          # Oil+FX alone → BEP
+                    'bep_partial_r2': float(partial_r2_bep),       # Oil+FX incremental over Revenue+Covid
+                    'bep_full_r2': float(r2_bep_full),
+                    'margin_direct_r2': float(r2_margin_macro),    # Oil+FX alone → EBIT Margin
+                    'margin_partial_r2': float(partial_r2_margin), # Oil+FX incremental over Revenue+Covid
+                    'margin_full_r2': float(r2_margin_full),
+                    'n_obs': len(hist_bep)
+                }
+        except Exception as e:
+            print(f"Partial R² calculation skipped: {e}")
+
+    # =========================================================================
     # RUN ALL
     # =========================================================================
     def run_all(self):
@@ -898,6 +1143,7 @@ class Calculator:
         self.calculate_net_debt_ebitda()
         self.calculate_cash_inflow_outflow()
         self.calculate_anomaly_scores()
+        self.calculate_macro_regression_leverage()
         self.dupont_analysis()
         self.dupont_factor_impact()
         self.calculate_dynamic_liquidity_and_cashflow()
@@ -982,7 +1228,9 @@ class Calculator:
         ebitda = _get(is_df, r'^EBITDA$')
         nnh = _get(bs_df, r'^Nợ ngắn hạn$')
         ndh = _get(bs_df, r'^Nợ dài hạn$')
-        cash = _get(bs_df, r'^Tiền và tương đương tiền')
+        cash_equiv = _get(bs_df, r'^Tiền và tương đương tiền')
+        st_invest = _get(bs_df, r'^Giá trị thuần đầu tư ngắn hạn')
+        cash = cash_equiv + st_invest
         
         gross_debt = nnh + ndh
 

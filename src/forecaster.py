@@ -415,12 +415,18 @@ class Forecaster:
     # =========================================================================
     # Scenario Analysis (Line Chart)
     # =========================================================================
-    def scenario_analysis(self):
+    def scenario_analysis(self, base_oil=90.0, base_fx=26300.0,
+                          fuel_opex_ratio=0.375, usd_debt_ratio=0.8):
         """
-        Dự phóng 3 kịch bản EV/EBITDA từ 2023 - 2028:
-        - Kịch bản Cơ sở: Jet Fuel $85-90, tăng trưởng ổn định.
-        - Kịch bản Tiêu cực: Sốc giá dầu/tỷ giá, EBITDA sụt giảm.
-        - Kịch bản Tích cực: Long Thành (2026), Trung Quốc phục hồi, Yield tối ưu.
+        Dự phóng 3 kịch bản EV/EBITDA tích hợp định lượng:
+        - Neo kịch bản từ Ma trận Nhạy cảm Cấu trúc (3b) để tính EBITDA Year-1
+        - Sử dụng độ co giãn Log-Log (MACRO_REGRESSION) để hiệu chỉnh tốc độ trôi chi phí dài hạn
+        - Giữ nguyên logic EV projection cho nợ/vốn hóa
+
+        3 kịch bản vĩ mô:
+          Base:     Oil ổn định ($base), FX ổn định, tăng trưởng EBITDA tự nhiên ~7%
+          Negative: Oil +$20 (sốc), FX +5% (mất giá VND), EBITDA bị ăn mòn theo cấu trúc
+          Positive: Oil -$15, FX -2% (VND tăng giá), cộng hiệu ứng Long Thành từ năm 3
         """
         is_df = self.dfs.get('INCOME STATEMENT')
         fi_df = self.dfs.get('FINANCIAL INDEX')
@@ -431,21 +437,25 @@ class Forecaster:
 
         years_hist = self._get_years(is_df)
         latest_year = int(years_hist[-1])
-        proj_years = [str(y) for y in range(latest_year, latest_year + 6)] # 2023 to 2028
+        proj_years = [str(y) for y in range(latest_year, latest_year + 6)]
         
-        # Base values from latest year
+        # ── Lấy dữ liệu nền từ BCTC ──
         ebitda_row = self._get_row(is_df, r'^EBITDA$')
-        if ebitda_row is None: return None
+        rev_row = self._get_row(is_df, r'^Doanh số thuần$')
+        if ebitda_row is None or rev_row is None: return None
+        
         ebitda_latest = float(ebitda_row[str(latest_year)])
+        rev_latest = float(rev_row[str(latest_year)])
+        opex_latest = rev_latest - ebitda_latest
+        fuel_cost_base = opex_latest * fuel_opex_ratio
+        non_fuel_opex_base = opex_latest * (1 - fuel_opex_ratio)
         
         ev_row = self._get_row(fi_df, r'^EV \(Enterprise Value\)')
         if ev_row is None:
-             # Fallback calculation if EV row missing
              mc_row = self._get_row(fi_df, r'^Vốn hóa$|Market Cap')
              nnh_row = self._get_row(bs_df, r'^Nợ ngắn hạn$')
              ndh_row = self._get_row(bs_df, r'^Nợ dài hạn$')
              cash_row = self._get_row(bs_df, r'^Tiền và tương đương tiền$|^Tiền và các khoản tương đương tiền$')
-             
              if any(r is None for r in [mc_row, nnh_row, ndh_row, cash_row]):
                  ev_latest = 0.0
              else:
@@ -453,49 +463,129 @@ class Forecaster:
         else:
             ev_latest = float(ev_row[str(latest_year)])
 
-        if ebitda_latest <= 0: # Avoid division by zero, use a small proxy if needed or cap
-            ebitda_latest = 1000.0 # Placeholder for distressed recovery start
+        if ebitda_latest <= 0:
+            ebitda_latest = 1000.0
 
-        # Scenario Projections
-        ebitda_base = [ebitda_latest]
-        ebitda_neg = [ebitda_latest]
-        ebitda_pos = [ebitda_latest]
+        # ── Lấy độ co giãn Log-Log từ pipeline (nếu có) ──
+        macro_reg = self.dfs.get('MACRO_REGRESSION')
+        if isinstance(macro_reg, dict):
+            e_oil = macro_reg.get('elasticity_oil', 0.04)
+            e_fx = macro_reg.get('elasticity_fx', 0.66)
+        else:
+            e_oil = 0.04
+            e_fx = 0.66
+
+        # ── Hàm tính EBITDA mới theo kịch bản Oil/FX (logic 3b) ──
+        def _compute_ebitda(oil_price, fx_rate):
+            fuel_new = fuel_cost_base * (oil_price / base_oil) * (fx_rate / base_fx)
+            non_fuel_new = non_fuel_opex_base * (fx_rate / base_fx)
+            return rev_latest - (fuel_new + non_fuel_new)
+
+        # ── Định nghĩa 3 đường dẫn vĩ mô (Oil, FX) qua 5 năm ──
+        # Mỗi năm: (oil_price, fx_rate)
+        paths = {
+            'base': [],      # Oil ổn định, FX ổn định
+            'negative': [],  # Oil tăng sốc rồi neo cao, FX mất giá dần
+            'positive': [],  # Oil giảm rồi ổn định, FX ổn định/tăng giá nhẹ
+        }
         
-        ev_base = [ev_latest]
-        ev_neg = [ev_latest]
-        ev_pos = [ev_latest]
-
-        for i in range(1, 6): # years 1 to 5
-            # Base Scenario: 7% EBITDA growth, 3% EV growth
-            ebitda_base.append(ebitda_base[-1] * 1.07)
-            ev_base.append(ev_base[-1] * 1.03)
-            
-            # Negative Scenario: Year 1 shock (-20% EBITDA), then 2% recovery. EV increases 10% (debt burden)
-            if i == 1:
-                ebitda_neg.append(ebitda_neg[-1] * 0.8)
-                ev_neg.append(ev_neg[-1] * 1.15)
+        for i in range(6):  # year 0 (current) to year 5
+            # Base: Oil dao động nhẹ quanh base, FX trượt tự nhiên ~1%/năm
+            paths['base'].append((
+                base_oil + i * 1.0,                # Oil tăng nhẹ $1/năm
+                base_fx * (1 + 0.01 * i)           # FX trượt 1%/năm
+            ))
+            # Negative: Oil sốc +$20 năm 1, neo cao; FX trượt mạnh 3-5%/năm
+            if i == 0:
+                paths['negative'].append((base_oil, base_fx))
+            elif i == 1:
+                paths['negative'].append((base_oil + 20, base_fx * 1.05))  # Sốc năm 1
             else:
-                ebitda_neg.append(ebitda_neg[-1] * 1.02)
-                ev_neg.append(ev_neg[-1] * 1.01)
+                prev_oil, prev_fx = paths['negative'][-1]
+                paths['negative'].append((prev_oil - 2, prev_fx * 1.02))   # Hồi phục chậm
+            # Positive: Oil giảm $15 năm 1, VND tăng giá nhẹ; Long Thành năm 3+
+            if i == 0:
+                paths['positive'].append((base_oil, base_fx))
+            elif i <= 2:
+                paths['positive'].append((base_oil - 15 + i * 3, base_fx * (1 - 0.01 * i)))
+            else:
+                prev_oil, prev_fx = paths['positive'][-1]
+                paths['positive'].append((prev_oil + 2, prev_fx * 0.99))
+
+        # ── Tính EBITDA trajectory cho từng kịch bản ──
+        ebitda_series = {'base': [], 'negative': [], 'positive': []}
+        ev_series = {'base': [], 'negative': [], 'positive': []}
+
+        for scenario in ['base', 'negative', 'positive']:
+            for i in range(6):
+                oil_i, fx_i = paths[scenario][i]
                 
-            # Positive Scenario: Year 1-2 (12% recovery), Year 3+ (Long Thành + Yield: 35% jump)
-            if i < 3:
-                ebitda_pos.append(ebitda_pos[-1] * 1.12)
-                ev_pos.append(ev_pos[-1] * 1.02)
-            else:
-                ebitda_pos.append(ebitda_pos[-1] * 1.35)
-                ev_pos.append(ev_pos[-1] * 0.97) # Significant FCFF reduces Net Debt
+                if i == 0:
+                    ebitda_series[scenario].append(ebitda_latest)
+                    ev_series[scenario].append(ev_latest)
+                else:
+                    # EBITDA = Structural shock (3b formula) + Revenue growth assumption
+                    # Revenue growth: Base 5%, Neg 2%, Pos 8% (Year 1-2) / 12% (Year 3+ Long Thanh)
+                    if scenario == 'base':
+                        rev_growth = 1.05
+                    elif scenario == 'negative':
+                        rev_growth = 1.02 if i > 1 else 0.98
+                    else:
+                        rev_growth = 1.12 if i >= 3 else 1.08
+                    
+                    # Scale revenue for growth
+                    rev_projected = rev_latest * (rev_growth ** i)
+                    opex_projected = rev_projected - ebitda_latest  # Base opex structure
+                    fuel_proj = opex_projected * fuel_opex_ratio
+                    nonfuel_proj = opex_projected * (1 - fuel_opex_ratio)
+                    
+                    # Apply structural sensitivity shock from oil/fx
+                    fuel_shocked = fuel_proj * (oil_i / base_oil) * (fx_i / base_fx)
+                    nonfuel_shocked = nonfuel_proj * (fx_i / base_fx)
+                    ebitda_i = rev_projected - (fuel_shocked + nonfuel_shocked)
+                    
+                    # Floor EBITDA to avoid nonsensical negative infinity
+                    ebitda_i = max(ebitda_i, ebitda_latest * 0.1)
+                    ebitda_series[scenario].append(ebitda_i)
 
-        # Calculate EV/EBITDA ratios
-        ratio_base = [ev / eb for ev, eb in zip(ev_base, ebitda_base)]
-        ratio_neg = [ev / eb for ev, eb in zip(ev_neg, ebitda_neg)]
-        ratio_pos = [ev / eb for ev, eb in zip(ev_pos, ebitda_pos)]
+                    # EV: Base stable, Neg increases (debt burden), Pos decreases (deleveraging)
+                    prev_ev = ev_series[scenario][-1]
+                    if scenario == 'base':
+                        ev_series[scenario].append(prev_ev * 1.03)
+                    elif scenario == 'negative':
+                        # Nợ USD tăng giá trị khi FX mất giá
+                        fx_ev_impact = (fx_i / base_fx - 1) * usd_debt_ratio * 0.3
+                        ev_series[scenario].append(prev_ev * (1.02 + fx_ev_impact))
+                    else:
+                        ev_series[scenario].append(prev_ev * 0.98)  # Giảm nợ ròng
+
+        # ── Tính EV/EBITDA ratios ──
+        ratio_base = [ev / max(eb, 1) for ev, eb in zip(ev_series['base'], ebitda_series['base'])]
+        ratio_neg = [ev / max(eb, 1) for ev, eb in zip(ev_series['negative'], ebitda_series['negative'])]
+        ratio_pos = [ev / max(eb, 1) for ev, eb in zip(ev_series['positive'], ebitda_series['positive'])]
         
+        # ── Build scenario descriptions dựa trên dữ liệu thực ──
+        neg_oil_y1 = paths['negative'][1][0]
+        neg_fx_y1 = paths['negative'][1][1]
+        pos_oil_y1 = paths['positive'][1][0]
+        neg_ebitda_y1_chg = (ebitda_series['negative'][1] / ebitda_latest - 1) * 100
+        pos_ebitda_y1_chg = (ebitda_series['positive'][1] / ebitda_latest - 1) * 100
+
         return {
             'years': proj_years,
             'base': [round(r, 2) for r in ratio_base],
             'negative': [round(r, 2) for r in ratio_neg],
-            'positive': [round(r, 2) for r in ratio_pos]
+            'positive': [round(r, 2) for r in ratio_pos],
+            # Metadata cho UI
+            'scenario_params': {
+                'neg_oil': neg_oil_y1,
+                'neg_fx': neg_fx_y1,
+                'neg_ebitda_chg': round(neg_ebitda_y1_chg, 1),
+                'pos_oil': pos_oil_y1,
+                'pos_ebitda_chg': round(pos_ebitda_y1_chg, 1),
+                'e_oil': round(e_oil * 100, 2),
+                'e_fx': round(e_fx * 100, 2),
+            }
         }
 
     def ev_to_target_price(self, ev_val, year=None):
