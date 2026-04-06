@@ -619,24 +619,10 @@ def main():
 
                 # Break-even line
 
-                # DOL annotations
-                for i in range(len(ol_x)):
-                    if dol_labels[i]:
-                        fig_ol.add_annotation(
-                            x=ol_x[i], y=rev_ntt[i], yref='y',
-                            text=dol_labels[i], showarrow=False, yshift=14,
-                            font=dict(
-                                color=COLORS['red'] if 'DOL=-' in dol_labels[i] else COLORS['orange'],
-                                size=10, family='monospace'
-                            )
-                        )
-
                 st.plotly_chart(fig_ol, use_container_width=True)
                 st.markdown(
                     '<div class="info-box">'
-                    '<b>Đòn bẩy Hoạt động (DOL)</b> = %ΔEBIT / %ΔDoanh thu. '
-                    'DOL cao → Mỗi 1% tăng doanh thu tạo ra nhiều hơn 1% tăng lợi nhuận. <br>'
-                    '<b>Cột xanh</b> = Doanh thu. <b>Cột đỏ</b> = Định phí (Khấu hao + SG&A). '
+                    '<b>Cột xanh</b> = Doanh thu. <b>Cột đỏ</b> = Định phí ước tính (Khấu hao + SG&A). <br>'
                     '<b>Đường vàng</b> = Lợi nhuận EBIT thực tế (tỷ VND), trục phải. '
                     '</div>',
                     unsafe_allow_html=True
@@ -759,6 +745,14 @@ def main():
                         line=dict(color='rgba(255, 255, 255, 0.4)', width=3, dash='dot'),
                         hoverinfo='skip'
                     ))
+                    
+                    # Base BEP line
+                    if np.isfinite(base_bep):
+                        fig_shock.add_vline(x=base_bep, line_dash='dash', line_color='rgba(255, 255, 255, 0.3)')
+                        fig_shock.add_annotation(
+                            x=base_bep, y=0, text=f'BEP Gốc: {base_bep:.0f}k', 
+                            showarrow=False, yshift=15, font=dict(color='rgba(255, 255, 255, 0.5)', size=10)
+                        )
 
                     # Curve Shock
                     if new_v_ratio < 1 and (delta_oil != 0 or delta_fx != 0):
@@ -837,8 +831,19 @@ def main():
         st.subheader("2. Khả năng sinh lời (Profitability)")
         c3, c4 = st.columns(2)
         with c3:
-            roa = get_fi_row(fi, r'^ROA$')
-            roic = get_fi_row(fi, r'^ROIC$')
+            # Ưu tiên lấy từ DuPont ROA/ROIC vì đã được tính theo số dư bình quân và nhân 100
+            roa = get_row_data(dupont_roa, r'ROA') if dupont_roa is not None else None
+            if roa is None:
+                roa = get_fi_row(fi, r'^ROA')
+                if roa is not None and roa.abs().max() <= 1.0: # Nếu là số thập phân (max <= 1)
+                     roa = roa * 100
+            
+            roic = get_row_data(dupont_roic, r'ROIC') if dupont_roic is not None else None
+            if roic is None:
+                roic = get_fi_row(fi, r'^ROIC')
+                if roic is not None and roic.abs().max() <= 1.0:
+                    roic = roic * 100
+
             fig_prof = plot_line_multi({'ROA': roa, 'ROIC': roic},
                                        "Tỷ suất Sinh lời Lõi: ROA / ROIC (%)", years, '%')
             st.plotly_chart(fig_prof, use_container_width=True)
@@ -1081,6 +1086,76 @@ def main():
                 '</div>',
                 unsafe_allow_html=True
             )
+
+            # --- BENEISH DECOMPOSITION ---
+            beneish_comp = anomaly_numeric.get('beneish_components', {})
+            if beneish_comp:
+                st.divider()
+                st.subheader("1. Bóc tách Chỉ số Beneish M-Score")
+                
+                # Nhóm 1: DSRI, GMI, SGI, TATA (Các chỉ số cốt lõi về doanh thu/lợi nhuận)
+                col_b1, col_b2 = st.columns(2)
+                with col_b1:
+                    fig_b1 = plot_line_multi({
+                        'DSRI (Phải thu)': beneish_comp.get('DSRI', []),
+                        'GMI (Biên lãi gộp)': beneish_comp.get('GMI', []),
+                        'SGI (Tăng trưởng DT)': beneish_comp.get('SGI', []),
+                        'TATA (Dồn tích)': beneish_comp.get('TATA', [])
+                    }, "Beneish: Doanh thu & Dồn tích", anom_years)
+                    fig_b1.add_hline(y=1.0, line_dash='dot', line_color='white', opacity=0.3)
+                    st.plotly_chart(fig_b1, use_container_width=True)
+                
+                # Nhóm 2: AQI, DEPI, SGAI, LVGI (Các chỉ số về tài sản & chi phí)
+                with col_b2:
+                    fig_b2 = plot_line_multi({
+                        'AQI (Chất lượng TS)': beneish_comp.get('AQI', []),
+                        'DEPI (Khấu hao)': beneish_comp.get('DEPI', []),
+                        'SGAI (Chi phí QL)': beneish_comp.get('SGAI', []),
+                        'LVGI (Đòn bẩy)': beneish_comp.get('LVGI', [])
+                    }, "Beneish: Tài sản & Chi phí", anom_years)
+                    fig_b2.add_hline(y=1.0, line_dash='dot', line_color='white', opacity=0.3)
+                    st.plotly_chart(fig_b2, use_container_width=True)
+                
+                st.markdown(
+                    '<div class="info-box">'
+                    '<b>DSRI > 1:</b> Tăng trưởng phải thu nhanh hơn doanh thu. '
+                    '<b>GMI > 1:</b> Biên lãi gộp suy giảm. '
+                    '<b>AQI > 1:</b> Tỷ lệ tài sản không sinh lời tăng. '
+                    '<b>SGI > 1:</b> Tăng trưởng doanh thu nóng. '
+                    '<b>DEPI > 1:</b> Tỷ lệ khấu hao giảm (kéo dài thời gian khấu hao để tăng lãi). '
+                    '<b>TATA:</b> Chênh lệch giữa LN ròng và Dòng tiền (Accruals).'
+                    '</div>',
+                    unsafe_allow_html=True
+                )
+
+            # --- ALTMAN DECOMPOSITION ---
+            altman_comp = anomaly_numeric.get('altman_components', {})
+            if altman_comp:
+                st.divider()
+                st.subheader("2. Bóc tách Chỉ số Altman Z''-Score")
+                fig_altman = plot_line_multi({
+                    'X1 (WC/Total Assets)': altman_comp.get('X1', []),
+                    'X2 (RE/Total Assets)': altman_comp.get('X2', []),
+                    'X3 (EBIT/Total Assets)': altman_comp.get('X3', []),
+                    'X4 (Equity/Liabilities)': altman_comp.get('X4', [])
+                }, "Các thành phần Altman Z''-Score", anom_years)
+                st.plotly_chart(fig_altman, use_container_width=True)
+                st.markdown(
+                    '<div class="info-box">'
+                    '<b>X1 (Vốn lưu động / Tổng TS):</b> Phản ánh thanh khoản ròng. <br>'
+                    '<b>X2 (Lợi nhuận giữ lại / Tổng TS):</b> Phản ánh mức độ tích lũy lãi. (HVN âm do lỗ lũy kế). <br>'
+                    '<b>X3 (EBIT / Tổng TS):</b> Hiệu suất sinh lời của tài sản. <br>'
+                    '<b>X4 (VCSH / Tổng Nợ):</b> Đòn bẩy tài chính (Vốn chủ / Nợ phải trả).'
+                    '</div>',
+                    unsafe_allow_html=True
+                )
+
+            # --- SLOAN ANALYSIS ---
+            st.divider()
+            st.subheader("3. Phân tích Dồn tích Sloan (Sloan Accruals)")
+            # Đã có biểu đồ Bar ở trên (lc3), ở đây bổ sung giải thích sâu
+            st.info("Chỉ số Sloan đo lường sự khác biệt giữa Lợi nhuận kế toán và Dòng tiền thực tế (bao gồm cả dòng tiền đầu tư). "
+                    "HVN có các năm Sloan > 10% (2015, 2025 dự kiến) cho thấy lợi nhuận có tỷ trọng dồn tích lớn, cần cẩn trọng về chất lượng thực thu.")
         else:
             st.info("Không đủ dữ liệu để tính Anomaly Scores.")
 
