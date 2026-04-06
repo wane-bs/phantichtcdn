@@ -317,35 +317,35 @@ def main():
             st.plotly_chart(fig_nd, use_container_width=True)
 
         # Cash Inflow / Outflow Line & Marker
-        if cash_inout is not None:
-            st.subheader("Thực Thu − Thực Chi − Dòng tiền Ròng")
-            ci_years = [c for c in cash_inout.columns if c != 'Khoản mục']
-            total_in = get_row_data(cash_inout, r'^═══ TỔNG THỰC THU')
-            total_out = get_row_data(cash_inout, r'^═══ TỔNG THỰC CHI')
-            net = get_row_data(cash_inout, r'^═══ DÒNG TIỀN RÒNG')
-            if total_in is not None and total_out is not None:
-                fig_ci = go.Figure()
-                fig_ci.add_trace(go.Scatter(
-                    x=ci_years, y=total_in, name='Tổng Thu',
-                    mode='lines+markers', line=dict(color=COLORS['green'], width=3),
-                    marker=dict(size=10, symbol='triangle-up')))
-                fig_ci.add_trace(go.Scatter(
-                    x=ci_years, y=total_out, name='Tổng Chi',
-                    mode='lines+markers', line=dict(color=COLORS['red'], width=3),
-                    marker=dict(size=10, symbol='triangle-down')))
-                if net is not None:
-                    net_colors = [COLORS['green'] if v >= 0 else COLORS['red'] for v in net]
-                    fig_ci.add_trace(go.Bar(
-                        x=ci_years, y=net, name='Dòng tiền Ròng',
-                        marker_color=net_colors, opacity=0.5,
-                        text=[f'{v:,.0f}' for v in net], textposition='outside'))
-                fig_ci.update_layout(
-                    title='Thực Thu vs Thực Chi & Dòng tiền Ròng (tỷ VND)',
-                    **DARK_TEMPLATE,
-                    legend=dict(orientation='h', y=-0.15),
-                    barmode='overlay'
-                )
-                st.plotly_chart(fig_ci, use_container_width=True)
+        # if cash_inout is not None:
+        #     st.subheader("Thực Thu − Thực Chi − Dòng tiền Ròng")
+        #     ci_years = [c for c in cash_inout.columns if c != 'Khoản mục']
+        #     total_in = get_row_data(cash_inout, r'^═══ TỔNG THỰC THU')
+        #     total_out = get_row_data(cash_inout, r'^═══ TỔNG THỰC CHI')
+        #     net = get_row_data(cash_inout, r'^═══ DÒNG TIỀN RÒNG')
+        #     if total_in is not None and total_out is not None:
+        #         fig_ci = go.Figure()
+        #         fig_ci.add_trace(go.Scatter(
+        #             x=ci_years, y=total_in, name='Tổng Thu',
+        #             mode='lines+markers', line=dict(color=COLORS['green'], width=3),
+        #             marker=dict(size=10, symbol='triangle-up')))
+        #         fig_ci.add_trace(go.Scatter(
+        #             x=ci_years, y=total_out, name='Tổng Chi',
+        #             mode='lines+markers', line=dict(color=COLORS['red'], width=3),
+        #             marker=dict(size=10, symbol='triangle-down')))
+        #         if net is not None:
+        #             net_colors = [COLORS['green'] if v >= 0 else COLORS['red'] for v in net]
+        #             fig_ci.add_trace(go.Bar(
+        #                 x=ci_years, y=net, name='Dòng tiền Ròng',
+        #                 marker_color=net_colors, opacity=0.5,
+        #                 text=[f'{v:,.0f}' for v in net], textposition='outside'))
+        #         fig_ci.update_layout(
+        #             title='Thực Thu vs Thực Chi & Dòng tiền Ròng (tỷ VND)',
+        #             **DARK_TEMPLATE,
+        #             legend=dict(orientation='h', y=-0.15),
+        #             barmode='overlay'
+        #         )
+        #         st.plotly_chart(fig_ci, use_container_width=True)
 
         # ── DSCR & Liquidity Runway ──
         if liquidity_cf is not None:
@@ -1153,9 +1153,50 @@ def main():
             # --- SLOAN ANALYSIS ---
             st.divider()
             st.subheader("3. Phân tích Dồn tích Sloan (Sloan Accruals)")
-            # Đã có biểu đồ Bar ở trên (lc3), ở đây bổ sung giải thích sâu
             st.info("Chỉ số Sloan đo lường sự khác biệt giữa Lợi nhuận kế toán và Dòng tiền thực tế (bao gồm cả dòng tiền đầu tư). "
-                    "HVN có các năm Sloan > 10% (2015, 2025 dự kiến) cho thấy lợi nhuận có tỷ trọng dồn tích lớn, cần cẩn trọng về chất lượng thực thu.")
+                    "Sloan > 10%: lợi nhuận có tỷ trọng dồn tích lớn — cần cẩn trọng về chất lượng thực thu. Sloan > 25%: mức nghiêm trọng.")
+            if sloan and anom_years:
+                fig_sloan_full = go.Figure()
+                sloan_colors_full = [
+                    COLORS['red'] if abs(v) > 25 else (COLORS['yellow'] if abs(v) > 10 else COLORS['green'])
+                    for v in sloan
+                ]
+                fig_sloan_full.add_trace(go.Bar(
+                    x=anom_years, y=sloan,
+                    marker_color=sloan_colors_full, name='Sloan Accruals (%)',
+                    text=[f'{v:+.2f}%' for v in sloan], textposition='outside'
+                ))
+                fig_sloan_full.add_hline(y=25, line_dash='dot', line_color=COLORS['red'],
+                    annotation_text='Nghiêm trọng +25%', annotation_position='top left',
+                    annotation_font=dict(size=10, color=COLORS['red']))
+                fig_sloan_full.add_hline(y=10, line_dash='dash', line_color=COLORS['yellow'],
+                    annotation_text='Cảnh báo +10%', annotation_position='top left',
+                    annotation_font=dict(size=10, color=COLORS['yellow']))
+                fig_sloan_full.add_hline(y=0, line_color='white', line_width=1, opacity=0.3)
+                fig_sloan_full.add_hline(y=-10, line_dash='dash', line_color=COLORS['yellow'],
+                    annotation_text='Cảnh báo −10%', annotation_position='bottom left',
+                    annotation_font=dict(size=10, color=COLORS['yellow']))
+                fig_sloan_full.add_hline(y=-25, line_dash='dot', line_color=COLORS['red'],
+                    annotation_text='Nghiêm trọng −25%', annotation_position='bottom left',
+                    annotation_font=dict(size=10, color=COLORS['red']))
+                fig_sloan_full.update_layout(
+                    title='Sloan Accruals (%) — Chất lượng Lợi nhuận Kế toán',
+                    yaxis_title='Sloan Accrual Ratio (%)',
+                    xaxis_title='Năm',
+                    **DARK_TEMPLATE,
+                    height=420,
+                    legend=dict(orientation='h', y=-0.15)
+                )
+                st.plotly_chart(fig_sloan_full, use_container_width=True)
+                st.markdown(
+                    '<div class="info-box">'
+                    '<b>Công thức Sloan:</b> (Lãi ròng − Dòng tiền HĐKD − Dòng tiền đầu tư) / Tổng tài sản. <br>'
+                    '<b>Màu xanh:</b> |Sloan| ≤ 10% — Chất lượng lợi nhuận tốt. '
+                    '<b>Màu vàng:</b> 10%–25% — Cảnh báo: lợi nhuận có phần dồn tích. '
+                    '<b>Màu đỏ:</b> > 25% — Nghiêm trọng: lợi nhuận kế toán tách rời dòng tiền thực tế.'
+                    '</div>',
+                    unsafe_allow_html=True
+                )
         else:
             st.info("Không đủ dữ liệu để tính Anomaly Scores.")
 
