@@ -1223,14 +1223,14 @@ class Calculator:
         # Trích xuất
         cfo = _get(cf_df, r'^Lưu chuyển tiền thuần từ các hoạt động sản xuất kinh doanh')
         capex = _get(cf_df, r'^Tiền mua tài sản cố định').abs()
-        interest = _get(is_df, r'^Chi phí lãi vay$').abs()
+        interest = _get(is_df, r'Chi phí lãi vay').abs()
         
         ebitda = _get(is_df, r'^EBITDA$')
         nnh = _get(bs_df, r'^Nợ ngắn hạn$')
         ndh = _get(bs_df, r'^Nợ dài hạn$')
         cash_equiv = _get(bs_df, r'^Tiền và tương đương tiền')
         st_invest = _get(bs_df, r'^Giá trị thuần đầu tư ngắn hạn')
-        cash = cash_equiv + st_invest
+        cash = cash_equiv
         
         gross_debt = nnh + ndh
 

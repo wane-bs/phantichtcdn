@@ -223,36 +223,36 @@ def main():
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
-        with col2:
-            st.subheader("Dòng tiền theo hoạt động (100% Stacked Area)")
-            ocf = get_row_data(cf, r'^Lưu chuyển tiền thuần từ các hoạt động sản xuất kinh doanh$')
-            icf = get_row_data(cf, r'^Lưu chuyển tiền tệ ròng từ hoạt động đầu tư$')
-            fcf = get_row_data(cf, r'^Lưu chuyển tiền tệ từ hoạt động tài chính$')
-
-            if ocf is not None and icf is not None and fcf is not None:
-                abs_ocf = ocf.abs(); abs_icf = icf.abs(); abs_fcf = fcf.abs()
-                total = (abs_ocf + abs_icf + abs_fcf).replace(0, 1)
-                pct_ocf = abs_ocf / total * 100
-                pct_icf = abs_icf / total * 100
-                pct_fcf = abs_fcf / total * 100
-
-                fig2 = go.Figure()
-                fig2.add_trace(go.Scatter(x=years, y=pct_ocf, name='OCF (HĐKD)',
-                    mode='lines', stackgroup='one', groupnorm='percent',
-                    fillcolor='rgba(43,147,72,0.6)', line=dict(color=COLORS['green'], width=0.5)))
-                fig2.add_trace(go.Scatter(x=years, y=pct_icf, name='ICF (Đầu tư)',
-                    mode='lines', stackgroup='one',
-                    fillcolor='rgba(233,69,96,0.6)', line=dict(color=COLORS['red'], width=0.5)))
-                fig2.add_trace(go.Scatter(x=years, y=pct_fcf, name='FCF (Tài chính)',
-                    mode='lines', stackgroup='one',
-                    fillcolor='rgba(83,52,131,0.6)', line=dict(color=COLORS['purple'], width=0.5)))
-                fig2.update_layout(
-                    title="Tỷ trọng dòng tiền theo hoạt động",
-                    yaxis_title='%', yaxis=dict(range=[0, 100]),
-                    **DARK_TEMPLATE,
-                    legend=dict(orientation='h', y=-0.15)
-                )
-                st.plotly_chart(fig2, use_container_width=True)
+#        with col2:
+#            st.subheader("Dòng tiền theo hoạt động (100% Stacked Area)")
+#            ocf = get_row_data(cf, r'^Lưu chuyển tiền thuần từ các hoạt động sản xuất kinh doanh$')
+#            icf = get_row_data(cf, r'^Lưu chuyển tiền tệ ròng từ hoạt động đầu tư$')
+#            fcf = get_row_data(cf, r'^Lưu chuyển tiền tệ từ hoạt động tài chính$')
+#
+#            if ocf is not None and icf is not None and fcf is not None:
+#                abs_ocf = ocf.abs(); abs_icf = icf.abs(); abs_fcf = fcf.abs()
+#                total = (abs_ocf + abs_icf + abs_fcf).replace(0, 1)
+#                pct_ocf = abs_ocf / total * 100
+#                pct_icf = abs_icf / total * 100
+#                pct_fcf = abs_fcf / total * 100
+#
+#                fig2 = go.Figure()
+#                fig2.add_trace(go.Scatter(x=years, y=pct_ocf, name='OCF (HĐKD)',
+#                    mode='lines', stackgroup='one', groupnorm='percent',
+#                    fillcolor='rgba(43,147,72,0.6)', line=dict(color=COLORS['green'], width=0.5)))
+#                fig2.add_trace(go.Scatter(x=years, y=pct_icf, name='ICF (Đầu tư)',
+#                    mode='lines', stackgroup='one',
+#                    fillcolor='rgba(233,69,96,0.6)', line=dict(color=COLORS['red'], width=0.5)))
+#                fig2.add_trace(go.Scatter(x=years, y=pct_fcf, name='FCF (Tài chính)',
+#                    mode='lines', stackgroup='one',
+#                    fillcolor='rgba(83,52,131,0.6)', line=dict(color=COLORS['purple'], width=0.5)))
+#                fig2.update_layout(
+#                    title="Tỷ trọng dòng tiền theo hoạt động",
+#                    yaxis_title='%', yaxis=dict(range=[0, 100]),
+#                    **DARK_TEMPLATE,
+#                    legend=dict(orientation='h', y=-0.15)
+#                )
+#                st.plotly_chart(fig2, use_container_width=True)
 
         # Cấu trúc Tài sản
         st.subheader("Cấu trúc Tài sản (100% Stacked Bar)")
@@ -432,7 +432,7 @@ def main():
                     st.plotly_chart(fig_rw, use_container_width=True)
                     st.markdown(
                         '<div class="info-box">'
-                        '<b>Liquidity Runway</b> = (Tiền mặt + ĐT ngắn hạn) / Chi phí cố định hàng tháng. '
+                        '<b>Liquidity Runway</b> = Tiền mặt / Chi phí cố định hàng tháng. '
                         '<b>&gt; 12 tháng</b>: Đệm an toàn. <b>6–12 tháng</b>: Cần dự phòng. '
                         '<b>&lt; 6 tháng</b>: Nguy hiểm tức thời.'
                         '</div>',

@@ -1,5 +1,5 @@
 # BÁO CÁO PHÂN TÍCH TÀI CHÍNH TỔNG HỢP — VIETNAM AIRLINES (HVN)
-*Ngày trích xuất: 05/04/2026 12:46 | Năm phân tích: 2025*
+*Ngày trích xuất: 07/04/2026 07:01 | Năm phân tích: 2025*
 
 *Triết lý phân tích: Enterprise Value (EV) Framework — Tập trung Dòng tiền & Khả năng sinh tồn*
 
@@ -34,7 +34,7 @@ Phương pháp: **EV/EBITDA Mean Reversion** + **DCF Terminal Value Integration*
 | Phương pháp | Định giá EV (tỷ VND) | Giá mục tiêu (VND/cp) |
 |---|---|---|
 | EV/EBITDA (±1σ) | 52,963 – 136,198 | **15,855 – 42,606** |
-| DCF TV Integration | 106,873 – 224,820 | **33,181 – 71,088** |
+| DCF TV Integration | 100,888 – 210,913 | **31,257 – 66,618** |
 | **Thị giá & EV hiện tại** | **72,239** | **22,050** |
 
 > [!TIP]

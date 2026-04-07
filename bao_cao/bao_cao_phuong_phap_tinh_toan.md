@@ -13,7 +13,7 @@ Tài liệu này chi tiết hóa toàn bộ các công thức, logic tính toán
 | :--- | :--- | :--- |
 | **DSCR** | $CFO / (Lãi\ vay + Nợ\ ngắn\ hạn)$ | CF, IS, BS |
 | **Stressed DSCR** | $(CFO \times 0.7) / (Lãi\ vay \times 1.2 + Nợ\ ngắn\ hạn)$ | Giả lập kịch bản sốc |
-| **Liquidity Runway** | $(Tiền\ mặt + ĐT\ ngắn\ hạn) /( (SG\&A + Lãi\ vay) / 12 )$ | BS, IS (Số tháng sinh tồn) |
+| **Liquidity Runway** | $Tiền\ mặt /( (SG\&A + Lãi\ vay) / 12 )$ | BS, IS (Số tháng sinh tồn) |
 | **FCFF** | $CFO - Tiền\ mua\ TSCĐ\ (Capex)$ | CF |
 | **FCFE** | $FCFF - Lãi\ vay + (Vay\ mới - Trả\ nợ\ gốc)$ | CF, IS |
 | **CFO / Gross Debt** | $CFO / (Nợ\ ngắn\ hạn + Nợ\ dài\ hạn)$ | CF, BS |
@@ -276,7 +276,7 @@ Trọng tâm: Đánh giá sức khỏe tài chính cơ bản, cơ cấu thanh kh
 5. **Cảnh báo biên độ an toàn (Liquidity DSCR & Runway Charts)**
    - **Diễn biến tự phục vụ nợ (DSCR Bars & Stress Line):** Căn cứ tỷ suất đảm bảo nợ, áp dụng kịch bản sốc 30% sụt giảm từ dòng tiền cốt lõi (CFO) kết hợp tăng 20% chi phí lãi vay (Interest).
    - **Khoảng cách sinh tồn (Liquidity Runway Bars):** 
-     - **Công thức mô hình:** $Runway_{tháng} = \frac{Tiền\ mặt\ +\ Đầu\ tư\ ngắn\ hạn}{Chi\ phí\ cố\ định\ hàng\ tháng}$
+     - **Công thức mô hình:** $Runway_{tháng} = \frac{Tiền\ mặt}{Chi\ phí\ cố\ định\ hàng\ tháng}$
       - *Trong đó:* Chi phí cố định hàng tháng = $(Chi\ phí\ Bán\ hàng + Chi\ phí\ QLDN + Lãi\ vay) / 12$. Cho biết doanh nghiệp có thể hấp thụ cú sốc doanh thu ngừng trệ trong bao nhiêu tháng tiếp nối.
 
 ## Tab 2: Chất lượng BCTC (Anomaly)
