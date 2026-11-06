@@ -146,7 +146,7 @@ class DataProcessor:
 
 if __name__ == "__main__":
     # Test read
-    processor = DataProcessor("data/hvn_fixed.xlsx")
+    processor = DataProcessor("data/hvn.xlsx")
     dfs = processor.load_and_normalize()
     processor.load_macro_data("data/oil&exchange_rate.xlsx")
     for name, df in processor.dataframes.items():

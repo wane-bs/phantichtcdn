@@ -37,9 +37,14 @@ class Validator:
             print(f"  Sai số: \n{(short_term + long_term) - total_assets}")
             
         # Check 3: Nợ phải trả + Vốn Chủ Sở Hữu == Tổng Nguồn Vốn
+        # Lưu ý chuẩn VAS trước TT200 (2011-2014): Lợi ích CĐTS nằm ngoài Vốn CSH
         liabilities = self._get_row_vals(bs, r'^NỢ PHẢI TRẢ$', years)
         equity = self._get_row_vals(bs, r'^VỐN CHỦ SỞ HỮU$', years)
-        check3 = (abs((liabilities + equity) - total_capital) < 1).all()
+        minority = self._get_row_vals(bs, r'cổ đông thiểu số', years)
+
+        check3_tt200 = abs((liabilities + equity) - total_capital) < 1
+        check3_vas_old = abs((liabilities + equity + minority) - total_capital) < 1
+        check3 = (check3_tt200 | check3_vas_old).all()
         print(f"Check 3 [Nợ phải trả + Vốn CSH == Tổng Nguồn Vốn]: {'PASSED' if check3 else 'FAILED'}")
         
         # Check 4: Tiền cuối kỳ CF == Tiền đầu tiên BS
@@ -47,10 +52,15 @@ class Validator:
         bs_cash = self._get_row_vals(bs, r'^Tiền và tương đương tiền', years)
         check4 = (abs(cf_cash - bs_cash) < 1).all()
         print(f"Check 4 [Tiền (CF) == Tiền (BS)]: {'PASSED' if check4 else 'FAILED'}")
+
+        all_passed = bool(check1 and check2 and check3 and check4)
+        return all_passed
         
 if __name__ == "__main__":
+    import sys
     from data_processor import DataProcessor
-    processor = DataProcessor("data/hvn_fixed.xlsx")
+    processor = DataProcessor("data/hvn.xlsx")
     dfs = processor.load_and_normalize()
     validator = Validator(dfs)
-    validator.run_checks()
+    passed = validator.run_checks()
+    sys.exit(0 if passed else 1)
