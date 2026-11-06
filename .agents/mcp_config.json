@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "lovable": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.lovable.dev"
+      ]
+    }
+  }
+}

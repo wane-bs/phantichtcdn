@@ -1,0 +1,52 @@
+name: Daily Macro & Financial Data Ingestion Bot
+
+on:
+  schedule:
+    # Chạy vào 01:00 UTC (08:00 AM giờ Việt Nam) từ Thứ 2 đến Thứ 6
+    - cron: '0 1 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  crawl-macro-data:
+    name: Crawl Macro Oil & FX Data
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          uv sync
+
+      - name: Run Macro Crawler
+        run: |
+          uv run python scripts/crawlers/macro_crawler.py
+
+      - name: Re-run Financial Pipeline with New Macro Data
+        run: |
+          PYTHONPATH=src uv run python src/pipeline_runner.py
+
+      - name: Auto-commit and Push Changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action Bot"
+          git add data/ output/
+          if git diff --staged --quiet; then
+            echo "No macro data changes to commit."
+          else
+            git commit -m "chore(data): automated daily macro & financial update [skip ci]"
+            git push
+          fi

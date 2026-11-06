@@ -31,3 +31,8 @@ data/~$*
 .ipynb_checkpoints/
 .streamlit/
 ! .streamlit/config.toml
+
+# Scratch logs & temporary dumps
+scripts/logs/
+temp*.csv
+*.log
