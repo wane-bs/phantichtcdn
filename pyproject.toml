@@ -17,6 +17,7 @@ dependencies = [
     "statsmodels>=0.14.0",
     "scipy>=1.11.0",
     "requests>=2.31.0",
+    "dspy>=3.4.1",
 ]
 
 [build-system]
